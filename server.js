@@ -219,7 +219,7 @@ function stopPCAudioCapture() {
 }
 
 // ========== WebSocket Server ==========
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true });
 
 wss.on('connection', (ws, req) => {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
