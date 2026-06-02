@@ -156,14 +156,22 @@
     function connect(){
       var proto=(location.protocol==='https:')?'wss:':'ws:';
       var url=proto+'//'+location.host;
-      dbg('Connecting...');
-      try{ws=new WebSocket(url);}catch(e){errEl.textContent='WS error: '+e.message;errEl.style.display='block';return;}
+      dot.className='dot'; stxt.textContent='Connecting...';
+      try{ws=new WebSocket(url);}catch(e){
+        stxt.textContent='Error';
+        setTimeout(connect,3000); return;
+      }
       ws.binaryType='arraybuffer';
 
+      // 5s connect timeout
+      var t=setTimeout(function(){
+        if(ws&&ws.readyState!==1){ try{ws.close();}catch(e){} }
+      },5000);
+
       ws.onopen=function(){
+        clearTimeout(t);
         dot.className='dot ok'; stxt.textContent='Connected';
         micBtn.disabled=false;
-        dbg('');
         // Start heartbeat
         clearInterval(pingTimer);
         pingTimer=setInterval(function(){
@@ -282,7 +290,12 @@
     spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};
 
     // ===== Start =====
-    connect();
+    // Wait for page fully loaded before connecting
+    if(document.readyState === 'complete') {
+      connect();
+    } else {
+      window.addEventListener('load', connect);
+    }
   </script>
 </body>
 </html>
