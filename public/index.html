@@ -1,103 +1,103 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Voice Assistant</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f0f1a;
-      color: #fff;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:#0f0f1a; color:#fff; min-height:100vh;
+      display:flex; flex-direction:column; align-items:center; padding:20px;
     }
-    .header { text-align: center; margin: 40px 0 30px; }
-    .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
-    .header p { font-size: 14px; color: #888; }
+    .header { text-align:center; margin:30px 0 20px; }
+    .header h1 { font-size:24px; font-weight:700; }
+    .header p { font-size:13px; color:#888; margin-top:6px; }
     .status-bar {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 20px; background: rgba(255,255,255,0.05);
-      border-radius: 12px; margin-bottom: 30px; width: 100%; max-width: 360px;
+      display:flex; align-items:center; gap:8px;
+      padding:10px 18px; background:rgba(255,255,255,0.05);
+      border-radius:12px; margin-bottom:24px; width:100%; max-width:360px;
     }
-    .status-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #555; transition: background 0.3s; flex-shrink: 0;
+    .dot {
+      width:10px; height:10px; border-radius:50%;
+      background:#555; flex-shrink:0; transition:background 0.3s;
     }
-    .status-dot.ok { background: #4ade80; box-shadow: 0 0 8px #4ade8066; }
-    .status-dot.rec { background: #f87171; animation: pulse 1s infinite; }
+    .dot.ok { background:#4ade80; box-shadow:0 0 8px #4ade8066; }
+    .dot.rec { background:#f87171; animation:pulse 1s infinite; }
+    .dot.blue { background:#60a5fa; animation:pulse 1.5s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .status-text { font-size: 14px; }
-    .waveform {
-      display: flex; align-items: center; justify-content: center;
-      gap: 3px; height: 60px; margin-bottom: 30px;
-    }
-    .waveform .bar {
-      width: 4px; height: 8px; background: #6366f1;
-      border-radius: 2px; transition: height 0.1s;
-    }
-    .waveform.on .bar { animation: wave 0.6s ease-in-out infinite; }
-    @keyframes wave { 0%,100%{height:8px;background:#6366f1} 50%{height:40px;background:#818cf8} }
+    .stxt { font-size:13px; }
+
+    /* Waveform */
+    .wave { display:flex; align-items:center; justify-content:center; gap:3px; height:50px; margin-bottom:20px; }
+    .wave .bar { width:4px; height:8px; background:#6366f1; border-radius:2px; }
+    .wave.on .bar { animation:w 0.6s ease-in-out infinite; }
+    @keyframes w { 0%,100%{height:8px;background:#6366f1} 50%{height:36px;background:#818cf8} }
+    .wave.blue .bar { background:#60a5fa; }
+    .wave.blue.on .bar { animation:w2 0.6s ease-in-out infinite; }
+    @keyframes w2 { 0%,100%{height:8px;background:#60a5fa} 50%{height:36px;background:#93c5fd} }
+
+    /* Buttons */
     .mic-btn {
-      width: 140px; height: 140px; border-radius: 50%; border: none;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: white; font-size: 48px; cursor: pointer;
-      transition: all 0.3s; box-shadow: 0 8px 30px rgba(99,102,241,0.3);
-      margin-bottom: 20px;
+      width:120px; height:120px; border-radius:50%; border:none;
+      background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff;
+      font-size:42px; cursor:pointer; margin-bottom:6px;
+      box-shadow:0 8px 30px rgba(99,102,241,0.3); transition:all 0.3s;
     }
-    .mic-btn:active { transform: scale(0.95); }
-    .mic-btn.rec {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      box-shadow: 0 8px 30px rgba(239,68,68,0.4);
+    .mic-btn:active { transform:scale(0.95); }
+    .mic-btn.rec { background:linear-gradient(135deg,#ef4444,#dc2626); box-shadow:0 8px 30px rgba(239,68,68,0.4); }
+    .mic-btn:disabled { background:#333; box-shadow:none; cursor:not-allowed; }
+    .lbl { font-size:13px; color:#888; margin-bottom:24px; }
+
+    /* Sections */
+    .section {
+      width:100%; max-width:360px;
+      background:rgba(255,255,255,0.05); border-radius:16px;
+      padding:16px 20px; margin-bottom:12px;
     }
-    .mic-btn:disabled { background: #333; box-shadow: none; cursor: not-allowed; }
-    .label { font-size: 14px; color: #888; margin-bottom: 30px; }
-    .speaker-box {
-      width: 100%; max-width: 360px;
-      background: rgba(255,255,255,0.05); border-radius: 16px; padding: 20px;
-    }
-    .speaker-box h3 { font-size: 14px; color: #888; margin-bottom: 12px; }
-    .row { display: flex; align-items: center; justify-content: space-between; }
+    .section h3 { font-size:13px; color:#888; margin-bottom:10px; }
+    .row { display:flex; align-items:center; justify-content:space-between; }
+    .row span { font-size:13px; }
     .toggle {
-      width: 50px; height: 28px; background: #333; border-radius: 14px;
-      position: relative; cursor: pointer; transition: background 0.3s;
+      width:46px; height:26px; background:#333; border-radius:13px;
+      position:relative; cursor:pointer; transition:background 0.3s;
     }
-    .toggle.on { background: #6366f1; }
+    .toggle.on { background:#6366f1; }
+    .toggle.on.blue { background:#3b82f6; }
     .toggle::after {
-      content:''; width: 22px; height: 22px; background: white;
-      border-radius: 50%; position: absolute; top: 3px; left: 3px; transition: left 0.3s;
+      content:''; width:20px; height:20px; background:#fff;
+      border-radius:50%; position:absolute; top:3px; left:3px; transition:left 0.3s;
     }
-    .toggle.on::after { left: 25px; }
-    .vol { display:flex; align-items:center; gap:10px; margin-top:12px; }
-    .vol span { font-size: 18px; }
+    .toggle.on::after { left:23px; }
+    .vol { display:flex; align-items:center; gap:8px; margin-top:10px; }
+    .vol span { font-size:16px; }
     input[type=range] {
       flex:1; -webkit-appearance:none; height:4px;
       background:#333; border-radius:2px; outline:none;
     }
     input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance:none; width:18px; height:18px;
+      -webkit-appearance:none; width:16px; height:16px;
       background:#6366f1; border-radius:50%; cursor:pointer;
     }
-    .err { color:#f87171; font-size:13px; text-align:center; margin-top:20px; display:none; }
-    .debug { color:#666; font-size:11px; margin-top:20px; text-align:center; }
+    .err { color:#f87171; font-size:12px; text-align:center; margin-top:16px; display:none; }
+    .dbg { color:#555; font-size:11px; margin-top:12px; text-align:center; min-height:16px; }
   </style>
 </head>
 <body>
+
   <div class="header">
     <h1>Voice Assistant</h1>
-    <p>Phone as PC Mic & Speaker</p>
+    <p>Phone as PC Mic &amp; Speaker</p>
   </div>
 
   <div class="status-bar">
-    <div class="status-dot" id="dot"></div>
-    <span class="status-text" id="statusTxt">Connecting...</span>
+    <div class="dot" id="dot"></div>
+    <span class="stxt" id="stxt">Connecting...</span>
   </div>
 
-  <div class="waveform" id="wave">
+  <!-- Mic waveform -->
+  <div class="wave" id="micWave">
     <div class="bar" style="animation-delay:0s"></div>
     <div class="bar" style="animation-delay:.1s"></div>
     <div class="bar" style="animation-delay:.2s"></div>
@@ -107,175 +107,171 @@
     <div class="bar" style="animation-delay:.3s"></div>
     <div class="bar" style="animation-delay:.2s"></div>
     <div class="bar" style="animation-delay:.1s"></div>
-    <div class="bar" style="animation-delay:0s"></div>
   </div>
 
+  <!-- Mic button -->
   <button class="mic-btn" id="micBtn" disabled>&#127908;</button>
-  <div class="label" id="micLabel">Tap to start mic</div>
+  <div class="lbl" id="micLbl">Tap to start mic</div>
 
-  <div class="speaker-box">
-    <h3>Speaker Output</h3>
+  <!-- Speaker: receive PC audio -->
+  <div class="section">
+    <h3>&#128266; Speaker - Hear PC Audio</h3>
     <div class="row">
       <span>Receive PC audio</span>
       <div class="toggle" id="spkToggle"></div>
     </div>
     <div class="vol">
       <span>&#128266;</span>
-      <input type="range" id="volSlider" min="0" max="100" value="80">
+      <input type="range" id="spkVol" min="0" max="100" value="80">
       <span>&#128266;</span>
     </div>
   </div>
 
+  <!-- Stats -->
+  <div class="section">
+    <h3>Stats</h3>
+    <div class="row"><span>Mic data sent</span><span id="statMic">0 KB</span></div>
+    <div class="row" style="margin-top:6px"><span>Speaker data received</span><span id="statSpk">0 KB</span></div>
+  </div>
+
   <div class="err" id="err"></div>
-  <div class="debug" id="dbg"></div>
+  <div class="dbg" id="dbg"></div>
 
   <script>
-    var dot = document.getElementById('dot');
-    var statusTxt = document.getElementById('statusTxt');
-    var micBtn = document.getElementById('micBtn');
-    var micLabel = document.getElementById('micLabel');
-    var wave = document.getElementById('wave');
-    var spkToggle = document.getElementById('spkToggle');
-    var volSlider = document.getElementById('volSlider');
-    var errEl = document.getElementById('err');
-    var dbgEl = document.getElementById('dbg');
+    var dot=document.getElementById('dot'), stxt=document.getElementById('stxt');
+    var micBtn=document.getElementById('micBtn'), micLbl=document.getElementById('micLbl');
+    var micWave=document.getElementById('micWave');
+    var spkToggle=document.getElementById('spkToggle'), spkVol=document.getElementById('spkVol');
+    var errEl=document.getElementById('err'), dbgEl=document.getElementById('dbg');
+    var statMic=document.getElementById('statMic'), statSpk=document.getElementById('statSpk');
 
-    var ws = null;
-    var recording = false;
-    var spkOn = false;
-    var actx = null;
-    var playCtx = null;
-    var gainNode = null;
-    var nextTime = 0;
-    var stream = null;
+    var ws=null, recording=false, spkOn=false;
+    var actx=null, playCtx=null, gainNode=null, nextTime=0, stream=null;
+    var micBytes=0, spkBytes=0;
 
-    function dbg(msg) { dbgEl.textContent = msg; dbgEl.style.display = 'block'; }
+    function dbg(m){dbgEl.textContent=m;}
+    function fmt(b){return b>1048576?(b/1048576).toFixed(1)+' MB':b>1024?(b/1024).toFixed(1)+' KB':b+' B';}
 
-    // Connect
-    function connect() {
-      var proto = (location.protocol === 'https:') ? 'wss:' : 'ws:';
-      var url = proto + '//' + location.host;
-      dbg('Connecting to ' + url + '...');
-      try {
-        ws = new WebSocket(url);
-      } catch(e) {
-        errEl.textContent = 'WebSocket error: ' + e.message;
-        errEl.style.display = 'block';
-        return;
-      }
-      ws.binaryType = 'arraybuffer';
+    // ===== Connect =====
+    function connect(){
+      var proto=(location.protocol==='https:')?'wss:':'ws:';
+      var url=proto+'//'+location.host;
+      dbg('Connecting...');
+      try{ws=new WebSocket(url);}catch(e){errEl.textContent='WS error: '+e.message;errEl.style.display='block';return;}
+      ws.binaryType='arraybuffer';
 
-      ws.onopen = function() {
-        dot.className = 'status-dot ok';
-        statusTxt.textContent = 'Connected';
-        micBtn.disabled = false;
-        dbg('Connected!');
-        setTimeout(function(){ dbgEl.style.display='none'; }, 2000);
+      ws.onopen=function(){
+        dot.className='dot ok'; stxt.textContent='Connected';
+        micBtn.disabled=false; dbg('Connected!');
+        setTimeout(function(){dbgEl.textContent='';},2000);
       };
-
-      ws.onclose = function() {
-        dot.className = 'status-dot';
-        statusTxt.textContent = 'Disconnected';
-        micBtn.disabled = true;
-        stopMic();
-        dbg('Reconnecting in 3s...');
-        setTimeout(connect, 3000);
+      ws.onclose=function(){
+        dot.className='dot'; stxt.textContent='Disconnected';
+        micBtn.disabled=true; stopMic(); stopSpeaker();
+        dbg('Reconnecting...'); setTimeout(connect,3000);
       };
-
-      ws.onerror = function() {
-        errEl.textContent = 'Connection failed';
-        errEl.style.display = 'block';
-      };
-
-      ws.onmessage = function(ev) {
-        if (typeof ev.data === 'string') {
-          try { var m = JSON.parse(ev.data); if(m.type==='connected') dbg('Server confirmed'); } catch(e){}
-        } else if (spkOn) {
-          playChunk(ev.data);
+      ws.onerror=function(){errEl.textContent='Connection failed';errEl.style.display='block';};
+      ws.onmessage=function(ev){
+        if(typeof ev.data==='string'){
+          try{var m=JSON.parse(ev.data);if(m.type==='connected')dbg('Server OK');}catch(e){}
+        }else{
+          // Binary = PC audio
+          spkBytes+=ev.data.byteLength;
+          statSpk.textContent=fmt(spkBytes);
+          if(spkOn) playChunk(ev.data);
         }
       };
     }
 
-    // Mic
-    function startMic() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        errEl.textContent = 'Browser does not support mic access. Try Chrome/Safari.';
-        errEl.style.display = 'block';
-        return;
+    // ===== Mic (Phone -> PC) =====
+    function startMic(){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        errEl.textContent='Mic not supported';errEl.style.display='block';return;
       }
-      dbg('Requesting mic permission...');
+      dbg('Requesting mic...');
       navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate:48000, channelCount:1, echoCancellation:true, noiseSuppression:true }
-      }).then(function(s) {
-        stream = s;
-        actx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate:48000 });
-        var src = actx.createMediaStreamSource(s);
-        var proc = actx.createScriptProcessor(4096, 1, 1);
-        src.connect(proc);
-        proc.connect(actx.destination);
-
-        proc.onaudioprocess = function(e) {
-          if (!recording || !ws || ws.readyState !== 1) return;
-          var f32 = e.inputBuffer.getChannelData(0);
-          var i16 = new Int16Array(f32.length);
-          for (var i = 0; i < f32.length; i++) {
-            var v = f32[i] < 0 ? f32[i] * 0x8000 : f32[i] * 0x7FFF;
-            i16[i] = Math.max(-32768, Math.min(32767, v));
+        audio:{sampleRate:48000,channelCount:1,echoCancellation:true,noiseSuppression:true}
+      }).then(function(s){
+        stream=s;
+        actx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:48000});
+        var src=actx.createMediaStreamSource(s);
+        var proc=actx.createScriptProcessor(4096,1,1);
+        src.connect(proc); proc.connect(actx.destination);
+        proc.onaudioprocess=function(e){
+          if(!recording||!ws||ws.readyState!==1)return;
+          var f32=e.inputBuffer.getChannelData(0);
+          var i16=new Int16Array(f32.length);
+          for(var i=0;i<f32.length;i++){
+            i16[i]=Math.max(-32768,Math.min(32767,f32[i]<0?f32[i]*0x8000:f32[i]*0x7FFF));
           }
           ws.send(i16.buffer);
+          micBytes+=i16.buffer.byteLength;
+          statMic.textContent=fmt(micBytes);
         };
-
-        recording = true;
-        micBtn.className = 'mic-btn rec';
-        micBtn.innerHTML = '&#9209;';
-        micLabel.textContent = 'Recording... tap to stop';
-        dot.className = 'status-dot rec';
-        wave.className = 'waveform on';
-      }).catch(function(err) {
-        errEl.textContent = 'Mic error: ' + err.message;
-        errEl.style.display = 'block';
+        recording=true;
+        micBtn.className='mic-btn rec';micBtn.innerHTML='&#9209;';
+        micLbl.textContent='Recording... tap to stop';
+        dot.className='dot rec'; micWave.className='wave on';
+        dbg('');
+      }).catch(function(err){
+        errEl.textContent='Mic: '+err.message;errEl.style.display='block';
       });
     }
 
-    function stopMic() {
-      recording = false;
-      if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream = null; }
-      if (actx && actx.state !== 'closed') { actx.close(); actx = null; }
-      micBtn.className = 'mic-btn';
-      micBtn.innerHTML = '&#127908;';
-      micLabel.textContent = 'Tap to start mic';
-      dot.className = ws && ws.readyState === 1 ? 'status-dot ok' : 'status-dot';
-      wave.className = 'waveform';
+    function stopMic(){
+      recording=false;
+      if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
+      if(actx&&actx.state!=='closed'){actx.close();actx=null;}
+      micBtn.className='mic-btn';micBtn.innerHTML='&#127908;';
+      micLbl.textContent='Tap to start mic';
+      dot.className=ws&&ws.readyState===1?'dot ok':'dot';
+      micWave.className='wave';
     }
 
-    // Speaker
-    function playChunk(buf) {
-      if (!playCtx) {
-        playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate:48000 });
-        gainNode = playCtx.createGain();
+    // ===== Speaker (PC -> Phone) =====
+    function startSpeaker(){
+      spkOn=true;
+      spkToggle.className='toggle on blue';
+      if(!playCtx){
+        playCtx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:48000});
+        gainNode=playCtx.createGain();
         gainNode.connect(playCtx.destination);
-        gainNode.gain.value = volSlider.value / 100;
+        gainNode.gain.value=spkVol.value/100;
       }
-      var i16 = new Int16Array(buf);
-      var f32 = new Float32Array(i16.length);
-      for (var i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
-      var ab = playCtx.createBuffer(1, f32.length, 48000);
-      ab.copyToChannel(f32, 0);
-      var src = playCtx.createBufferSource();
-      src.buffer = ab;
-      src.connect(gainNode);
-      var now = playCtx.currentTime;
-      if (nextTime < now) nextTime = now;
-      src.start(nextTime);
-      nextTime += ab.duration;
+      // Tell server to start sending PC audio
+      if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'start-pc-audio'}));
+      dbg('Receiving PC audio...');
+      setTimeout(function(){dbgEl.textContent='';},2000);
     }
 
-    // Events
-    micBtn.onclick = function() { recording ? stopMic() : startMic(); };
-    spkToggle.onclick = function() { spkOn = !spkOn; spkToggle.className = spkOn ? 'toggle on' : 'toggle'; };
-    volSlider.oninput = function() { if (gainNode) gainNode.gain.value = volSlider.value / 100; };
+    function stopSpeaker(){
+      spkOn=false;
+      spkToggle.className='toggle';
+      nextTime=0;
+      if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'stop-pc-audio'}));
+    }
 
-    // Start
+    function playChunk(buf){
+      if(!playCtx)return;
+      var i16=new Int16Array(buf);
+      var f32=new Float32Array(i16.length);
+      for(var i=0;i<i16.length;i++) f32[i]=i16[i]/32768;
+      var ab=playCtx.createBuffer(1,f32.length,48000);
+      ab.copyToChannel(f32,0);
+      var src=playCtx.createBufferSource();
+      src.buffer=ab; src.connect(gainNode);
+      var now=playCtx.currentTime;
+      if(nextTime<now)nextTime=now;
+      src.start(nextTime);
+      nextTime+=ab.duration;
+    }
+
+    // ===== Events =====
+    micBtn.onclick=function(){recording?stopMic():startMic();};
+    spkToggle.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
+    spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};
+
+    // ===== Start =====
     connect();
   </script>
 </body>

@@ -1,9 +1,16 @@
 /**
- * Voice Assistant Server v0.3.1
+ * Voice Assistant Server v0.4 - Bidirectional
+ * 
+ * Direction 1: Phone Mic -> PC (already working)
+ * Direction 2: PC Audio -> Phone Speaker
+ * 
+ * PC audio capture strategy (Windows):
+ *   1. ffmpeg recording from Windows audio device (wasapi)
+ *   2. If no ffmpeg: skip direction 2
  */
 
 const express = require('express');
-const http = require('http');
+const http = require('http'); // fallback only
 const https = require('https');
 const { WebSocketServer } = require('ws');
 const qrcode = require('qrcode-terminal');
@@ -17,102 +24,50 @@ const SAMPLE_RATE = 48000;
 const CHANNELS = 1;
 
 const app = express();
-const server = http.createServer(app);
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Try HTTPS on PORT+1
-let httpsServer = null;
-const HTTPS_PORT = PORT + 1;
-try {
-  const keyPath = path.join(__dirname, 'key.pem');
-  const certPath = path.join(__dirname, 'cert.pem');
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    const options = {
-      key: fs.readFileSync(keyPath),
-      cert: fs.readFileSync(certPath),
-    };
-    httpsServer = https.createServer(options, app);
-    httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
-      console.log('[HTTPS] Also available on port ' + HTTPS_PORT + ' (self-signed cert)');
-    });
-    // WebSocket upgrade for HTTPS
-    httpsServer.on('upgrade', (req, socket, head) => {
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit('connection', ws, req);
-      });
-    });
-  }
-} catch(e) {
-  // HTTPS not available, HTTP only
-}
-
-let ffmpegProcess = null;
+// ========== Audio Output (Phone -> PC) ==========
+let outputFfmpeg = null;
 let wavStream = null;
 let wavPath = null;
 let bytesReceived = 0;
-let useFfmpeg = false;
+let useFfmpegOut = false;
 
 function initAudioOutput() {
   try {
     const test = spawn('ffmpeg', ['-version']);
-    test.on('error', () => {
-      console.log('[INFO] ffmpeg not found, using file output mode');
-      console.log('       Install ffmpeg: winget install Gyan.FFmpeg');
-      initFileOutput();
-    });
+    test.on('error', () => { initFileOutput(); });
     test.on('close', (code) => {
-      if (code === 0) {
-        console.log('[OK] ffmpeg ready');
-        initFFmpegOutput();
-      } else {
-        initFileOutput();
-      }
+      if (code === 0) { initFfmpegOutput(); } else { initFileOutput(); }
     });
-  } catch (e) {
-    initFileOutput();
-  }
+  } catch (e) { initFileOutput(); }
 }
 
-function initFFmpegOutput() {
-  const args = [
-    '-f', 's16le',
-    '-ar', String(SAMPLE_RATE),
-    '-ac', String(CHANNELS),
-    '-i', 'pipe:0',
-    '-f', 'waveaudio',
-    '0',
-  ];
+function initFfmpegOutput() {
+  const args = ['-f','s16le','-ar',String(SAMPLE_RATE),'-ac',String(CHANNELS),'-i','pipe:0','-f','waveaudio','0'];
   try {
-    ffmpegProcess = spawn('ffmpeg', args);
-    ffmpegProcess.stdin.on('error', () => {});
-    ffmpegProcess.stderr.on('data', () => {});
-    ffmpegProcess.on('close', (code) => {
-      if (code !== 0 && !wavStream) {
-        console.log('[WARN] ffmpeg failed, fallback to file mode');
-        initFileOutput();
-      }
-    });
-    useFfmpeg = true;
-    console.log('[OK] Audio -> ffmpeg -> default device');
-  } catch (e) {
-    initFileOutput();
-  }
+    outputFfmpeg = spawn('ffmpeg', args);
+    outputFfmpeg.stdin.on('error', () => {});
+    outputFfmpeg.stderr.on('data', () => {});
+    outputFfmpeg.on('close', () => { if (!wavStream) initFileOutput(); });
+    useFfmpegOut = true;
+    console.log('[OUT] Audio -> ffmpeg -> default device');
+  } catch (e) { initFileOutput(); }
 }
 
 function initFileOutput() {
-  const outputDir = path.join(__dirname, 'output');
-  fs.mkdirSync(outputDir, { recursive: true });
-  wavPath = path.join(outputDir, `recording_${Date.now()}.wav`);
+  const dir = path.join(__dirname, 'output');
+  fs.mkdirSync(dir, { recursive: true });
+  wavPath = path.join(dir, `recording_${Date.now()}.wav`);
   wavStream = fs.createWriteStream(wavPath);
   wavStream.write(Buffer.alloc(44));
-  console.log(`[OK] Audio saving to: ${wavPath}`);
-  console.log('     Press Ctrl+C to stop and save');
+  console.log('[OUT] Saving to: ' + wavPath);
 }
 
-function writeAudio(data) {
+function writePCMAudio(data) {
   bytesReceived += data.length;
-  if (useFfmpeg && ffmpegProcess && ffmpegProcess.stdin.writable) {
-    ffmpegProcess.stdin.write(data);
+  if (useFfmpegOut && outputFfmpeg && outputFfmpeg.stdin.writable) {
+    outputFfmpeg.stdin.write(data);
   } else if (wavStream) {
     wavStream.write(data);
   }
@@ -121,26 +76,112 @@ function writeAudio(data) {
 function finalizeWav() {
   if (wavStream && wavPath) {
     const fd = fs.openSync(wavPath, 'r+');
-    const header = Buffer.alloc(44);
-    header.write('RIFF', 0);
-    header.writeUInt32LE(36 + bytesReceived, 4);
-    header.write('WAVE', 8);
-    header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16);
-    header.writeUInt16LE(1, 20);
-    header.writeUInt16LE(CHANNELS, 22);
-    header.writeUInt32LE(SAMPLE_RATE, 24);
-    header.writeUInt32LE(SAMPLE_RATE * CHANNELS * 2, 28);
-    header.writeUInt16LE(CHANNELS * 2, 32);
-    header.writeUInt16LE(16, 34);
-    header.write('data', 36);
-    header.writeUInt32LE(bytesReceived, 40);
-    fs.writeSync(fd, header, 0, 44, 0);
+    const h = Buffer.alloc(44);
+    h.write('RIFF',0); h.writeUInt32LE(36+bytesReceived,4); h.write('WAVE',8);
+    h.write('fmt ',12); h.writeUInt32LE(16,16); h.writeUInt16LE(1,20);
+    h.writeUInt16LE(CHANNELS,22); h.writeUInt32LE(SAMPLE_RATE,24);
+    h.writeUInt32LE(SAMPLE_RATE*CHANNELS*2,28); h.writeUInt16LE(CHANNELS*2,32);
+    h.writeUInt16LE(16,34); h.write('data',36); h.writeUInt32LE(bytesReceived,40);
+    fs.writeSync(fd, h, 0, 44, 0);
     fs.closeSync(fd);
     wavStream.end();
   }
 }
 
+// ========== Audio Input (PC -> Phone) ==========
+let captureProcess = null;
+let capturing = false;
+
+function startPCAudioCapture(broadcastFn) {
+  // Use ffmpeg to capture Windows audio via WASAPI (loopback)
+  // This captures whatever is playing on the PC speakers
+  const args = [
+    '-f', 'dshow',           // DirectShow (Windows)
+    '-i', 'audio=Stereo Mix (Realtek(R) Audio)',  // Try stereo mix first
+    '-f', 's16le',
+    '-ar', String(SAMPLE_RATE),
+    '-ac', String(CHANNELS),
+    'pipe:1'                  // Output raw PCM to stdout
+  ];
+
+  // Alternative: WASAPI loopback
+  const wasapiArgs = [
+    '-f', 'wasapi',
+    '-i', 'default',          // Default audio output device (loopback)
+    '-f', 's16le',
+    '-ar', String(SAMPLE_RATE),
+    '-ac', String(CHANNELS),
+    'pipe:1'
+  ];
+
+  console.log('[IN] Starting PC audio capture...');
+
+  // Try WASAPI first (more reliable for capturing system audio)
+  tryStartCapture(wasapiArgs, broadcastFn, function() {
+    // Fallback: try dshow with stereo mix
+    console.log('[IN] WASAPI failed, trying Stereo Mix...');
+    tryStartCapture(args, broadcastFn, function() {
+      console.log('[IN] No capture method available.');
+      console.log('     Install VB-Audio Virtual Cable for system audio capture:');
+      console.log('     https://vb-audio.com/Cable/');
+      console.log('     Or use ffmpeg with wasapi support.');
+    });
+  });
+}
+
+function tryStartCapture(args, broadcastFn, onFail) {
+  try {
+    captureProcess = spawn('ffmpeg', args);
+    let started = false;
+
+    captureProcess.stderr.on('data', (data) => {
+      const str = data.toString();
+      if (!started && str.includes('Stream #')) {
+        started = true;
+        capturing = true;
+        console.log('[IN] PC audio capture started');
+      }
+    });
+
+    captureProcess.stdout.on('data', (data) => {
+      if (!capturing) return;
+      // Broadcast PCM data to all connected phones
+      broadcastFn(data);
+    });
+
+    captureProcess.on('close', (code) => {
+      capturing = false;
+      console.log('[IN] Capture stopped (code: ' + code + ')');
+      if (!started && onFail) onFail();
+    });
+
+    captureProcess.on('error', (e) => {
+      capturing = false;
+      if (onFail) onFail();
+    });
+
+    // Timeout: if not started in 3s, fail
+    setTimeout(() => {
+      if (!started && onFail) {
+        captureProcess.kill();
+        onFail();
+      }
+    }, 3000);
+
+  } catch (e) {
+    if (onFail) onFail();
+  }
+}
+
+function stopPCAudioCapture() {
+  if (captureProcess) {
+    captureProcess.kill();
+    captureProcess = null;
+    capturing = false;
+  }
+}
+
+// ========== WebSocket Server ==========
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws, req) => {
@@ -150,36 +191,66 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
-      writeAudio(data);
+      writePCMAudio(data);
     } else {
       try {
         const msg = JSON.parse(data.toString());
-        if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
-        else if (msg.type === 'audio-config') console.log(`[AUDIO] config: rate=${msg.sampleRate}`);
+        switch(msg.type) {
+          case 'ping': ws.send(JSON.stringify({ type: 'pong' })); break;
+          case 'audio-config': console.log('[AUDIO] config: rate=' + msg.sampleRate); break;
+          case 'start-pc-audio':
+            console.log('[IN] Phone requested PC audio');
+            startPCAudioCapture((pcmData) => {
+              if (ws.readyState === 1) ws.send(pcmData);
+            });
+            break;
+          case 'stop-pc-audio':
+            console.log('[IN] Phone stopped PC audio');
+            stopPCAudioCapture();
+            break;
+        }
       } catch (e) {}
     }
   });
 
   ws.on('close', () => {
     console.log(`[PHONE] Disconnected (remaining: ${wss.clients.size})`);
+    stopPCAudioCapture();
     if (wss.clients.size === 0 && bytesReceived > 0) {
       finalizeWav();
       const sec = (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1);
-      console.log(`[STATS] Recorded ${sec}s (${bytesReceived} bytes)`);
+      console.log(`[STATS] Recorded ${sec}s`);
     }
   });
 
   ws.send(JSON.stringify({ type: 'connected' }));
 });
 
+// ========== Server (HTTPS only) ==========
+let httpsServer = null;
+const keyPath = path.join(__dirname, 'key.pem');
+const certPath = path.join(__dirname, 'cert.pem');
+
+if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+  httpsServer = https.createServer({
+    key: fs.readFileSync(keyPath),
+    cert: fs.readFileSync(certPath),
+  }, app);
+} else {
+  console.log('[WARN] No cert found, using HTTP (mic may not work on phone)');
+  httpsServer = http.createServer(app);
+}
+
+httpsServer.listen(PORT, '0.0.0.0', () => {
+  httpsServer.on('upgrade', (req, socket, head) => {
+    wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); });
+  });
 function getAllIPs() {
   const interfaces = os.networkInterfaces();
-  const lanIps = [];
-  const otherIps = [];
+  const lanIps = [], otherIps = [];
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        // Filter out WSL/Hyper-V virtual addresses
         const isWSL = name.toLowerCase().includes('veth') ||
                       name.toLowerCase().includes('ws') ||
                       name.toLowerCase().includes('hyper') ||
@@ -187,62 +258,38 @@ function getAllIPs() {
                       iface.address.startsWith('172.20.') ||
                       iface.address.startsWith('172.24.') ||
                       iface.address.startsWith('172.25.');
-        if (!isWSL) {
-          lanIps.push({ address: iface.address, iface: name });
-        } else {
-          otherIps.push({ address: iface.address, iface: name });
-        }
+        if (!isWSL) lanIps.push({ address: iface.address, iface: name });
+        else otherIps.push({ address: iface.address, iface: name });
       }
     }
   }
   return { lanIps, otherIps };
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  const { lanIps, otherIps } = getAllIPs();
-  
-  console.log('\n=== Voice Assistant ===');
-  console.log('Server running on port ' + PORT + '\n');
+// ========== Start ==========
+  console.log('\n=== Voice Assistant v0.4 (Bidirectional) ===\n');
 
-  // Show all IPs for debugging
-  if (lanIps.length === 0 && otherIps.length === 0) {
-    console.log('[WARN] No external IP found!');
-    console.log('Try: http://localhost:' + PORT);
-  }
-
-  // Prefer real LAN IPs
   const showIps = lanIps.length > 0 ? lanIps : otherIps;
   for (const item of showIps) {
-    const url = 'http://' + item.address + ':' + PORT;
-    const httpsUrl = 'https://' + item.address + ':' + HTTPS_PORT;
+    const url = 'https://' + item.address + ':' + PORT;
     console.log('[' + item.iface + '] ' + item.address);
-    console.log('\n[HTTP] ' + url + ' (may not support mic)\n');
+    console.log('\nScan QR code:\n');
     qrcode.generate(url, { small: true });
-    console.log('\n[HTTPS] ' + httpsUrl + ' (use this for mic access)\n');
-    qrcode.generate(httpsUrl, { small: true });
     console.log('');
   }
 
-  // Also show filtered-out IPs for reference
-  if (lanIps.length > 0 && otherIps.length > 0) {
-    console.log('(Ignored virtual IPs: ' + otherIps.map(i=>i.address).join(', ') + ')');
-    console.log('');
-  }
-
-  console.log('='.repeat(30));
+  console.log('='.repeat(40));
   initAudioOutput();
   console.log('\nWaiting for phone connection...\n');
 });
 
 process.on('SIGINT', () => {
-  console.log('\n\n[STOP] Shutting down...');
-  if (ffmpegProcess) ffmpegProcess.kill();
+  console.log('\n\n[STOP]');
+  stopPCAudioCapture();
+  if (outputFfmpeg) outputFfmpeg.kill();
   finalizeWav();
-  if (bytesReceived > 0) {
-    const sec = (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1);
-    console.log(`[STATS] Total: ${sec}s`);
-  }
-  if (wavPath) console.log(`[FILE] ${wavPath}`);
-  server.close();
+  if (bytesReceived > 0) console.log('[STATS] Total: ' + (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1) + 's');
+  if (wavPath) console.log('[FILE] ' + wavPath);
+  if (httpsServer) httpsServer.close();
   process.exit(0);
 });
