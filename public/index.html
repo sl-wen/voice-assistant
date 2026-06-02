@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>语音助手 - Voice Assistant</title>
+  <title>Voice Assistant</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #0f0f1a;
@@ -17,457 +16,266 @@
       align-items: center;
       padding: 20px;
     }
-
-    .header {
-      text-align: center;
-      margin-bottom: 30px;
-      margin-top: 40px;
-    }
-
-    .header h1 {
-      font-size: 24px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .header p {
-      font-size: 14px;
-      color: #888;
-    }
-
+    .header { text-align: center; margin: 40px 0 30px; }
+    .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    .header p { font-size: 14px; color: #888; }
     .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 20px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 12px;
-      margin-bottom: 30px;
-      width: 100%;
-      max-width: 360px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 20px; background: rgba(255,255,255,0.05);
+      border-radius: 12px; margin-bottom: 30px; width: 100%; max-width: 360px;
     }
-
     .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #555;
-      transition: background 0.3s;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #555; transition: background 0.3s; flex-shrink: 0;
     }
-
-    .status-dot.connected { background: #4ade80; box-shadow: 0 0 8px #4ade8066; }
-    .status-dot.recording { background: #f87171; animation: pulse 1s infinite; }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
+    .status-dot.ok { background: #4ade80; box-shadow: 0 0 8px #4ade8066; }
+    .status-dot.rec { background: #f87171; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
     .status-text { font-size: 14px; }
-
-    /* 波形动画 */
     .waveform {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 3px;
-      height: 60px;
-      margin-bottom: 30px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 3px; height: 60px; margin-bottom: 30px;
     }
-
     .waveform .bar {
-      width: 4px;
-      height: 8px;
-      background: #6366f1;
-      border-radius: 2px;
-      transition: height 0.1s;
+      width: 4px; height: 8px; background: #6366f1;
+      border-radius: 2px; transition: height 0.1s;
     }
-
-    .waveform.active .bar {
-      animation: wave 0.6s ease-in-out infinite;
-    }
-
-    @keyframes wave {
-      0%, 100% { height: 8px; background: #6366f1; }
-      50% { height: 40px; background: #818cf8; }
-    }
-
-    /* 主按钮 */
+    .waveform.on .bar { animation: wave 0.6s ease-in-out infinite; }
+    @keyframes wave { 0%,100%{height:8px;background:#6366f1} 50%{height:40px;background:#818cf8} }
     .mic-btn {
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      border: none;
+      width: 140px; height: 140px; border-radius: 50%; border: none;
       background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: white;
-      font-size: 48px;
-      cursor: pointer;
-      transition: all 0.3s;
-      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.3);
+      color: white; font-size: 48px; cursor: pointer;
+      transition: all 0.3s; box-shadow: 0 8px 30px rgba(99,102,241,0.3);
       margin-bottom: 20px;
     }
-
-    .mic-btn:active {
-      transform: scale(0.95);
-    }
-
-    .mic-btn.recording {
+    .mic-btn:active { transform: scale(0.95); }
+    .mic-btn.rec {
       background: linear-gradient(135deg, #ef4444, #dc2626);
-      box-shadow: 0 8px 30px rgba(239, 68, 68, 0.4);
+      box-shadow: 0 8px 30px rgba(239,68,68,0.4);
     }
-
-    .mic-btn:disabled {
-      background: #333;
-      box-shadow: none;
-      cursor: not-allowed;
+    .mic-btn:disabled { background: #333; box-shadow: none; cursor: not-allowed; }
+    .label { font-size: 14px; color: #888; margin-bottom: 30px; }
+    .speaker-box {
+      width: 100%; max-width: 360px;
+      background: rgba(255,255,255,0.05); border-radius: 16px; padding: 20px;
     }
-
-    .label {
-      font-size: 14px;
-      color: #888;
-      margin-bottom: 30px;
+    .speaker-box h3 { font-size: 14px; color: #888; margin-bottom: 12px; }
+    .row { display: flex; align-items: center; justify-content: space-between; }
+    .toggle {
+      width: 50px; height: 28px; background: #333; border-radius: 14px;
+      position: relative; cursor: pointer; transition: background 0.3s;
     }
-
-    /* 喇叭控制 */
-    .speaker-section {
-      width: 100%;
-      max-width: 360px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 16px;
-      padding: 20px;
+    .toggle.on { background: #6366f1; }
+    .toggle::after {
+      content:''; width: 22px; height: 22px; background: white;
+      border-radius: 50%; position: absolute; top: 3px; left: 3px; transition: left 0.3s;
     }
-
-    .speaker-section h3 {
-      font-size: 14px;
-      color: #888;
-      margin-bottom: 12px;
+    .toggle.on::after { left: 25px; }
+    .vol { display:flex; align-items:center; gap:10px; margin-top:12px; }
+    .vol span { font-size: 18px; }
+    input[type=range] {
+      flex:1; -webkit-appearance:none; height:4px;
+      background:#333; border-radius:2px; outline:none;
     }
-
-    .speaker-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none; width:18px; height:18px;
+      background:#6366f1; border-radius:50%; cursor:pointer;
     }
-
-    .toggle-switch {
-      width: 50px;
-      height: 28px;
-      background: #333;
-      border-radius: 14px;
-      position: relative;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    .toggle-switch.active {
-      background: #6366f1;
-    }
-
-    .toggle-switch::after {
-      content: '';
-      width: 22px;
-      height: 22px;
-      background: white;
-      border-radius: 50%;
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      transition: left 0.3s;
-    }
-
-    .toggle-switch.active::after {
-      left: 25px;
-    }
-
-    .volume-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .volume-row span { font-size: 18px; }
-
-    input[type="range"] {
-      flex: 1;
-      -webkit-appearance: none;
-      height: 4px;
-      background: #333;
-      border-radius: 2px;
-      outline: none;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 18px;
-      height: 18px;
-      background: #6366f1;
-      border-radius: 50%;
-      cursor: pointer;
-    }
-
-    /* 连接失败提示 */
-    .error-msg {
-      color: #f87171;
-      font-size: 13px;
-      text-align: center;
-      margin-top: 20px;
-      display: none;
-    }
+    .err { color:#f87171; font-size:13px; text-align:center; margin-top:20px; display:none; }
+    .debug { color:#666; font-size:11px; margin-top:20px; text-align:center; }
   </style>
 </head>
 <body>
-
   <div class="header">
-    <h1>🎙️ 语音助手</h1>
-    <p>手机变 PC 麦克风 & 喇叭</p>
+    <h1>Voice Assistant</h1>
+    <p>Phone as PC Mic & Speaker</p>
   </div>
 
   <div class="status-bar">
-    <div class="status-dot" id="statusDot"></div>
-    <span class="status-text" id="statusText">连接中...</span>
+    <div class="status-dot" id="dot"></div>
+    <span class="status-text" id="statusTxt">Connecting...</span>
   </div>
 
-  <!-- 波形 -->
-  <div class="waveform" id="waveform">
-    <div class="bar" style="animation-delay: 0s"></div>
-    <div class="bar" style="animation-delay: 0.1s"></div>
-    <div class="bar" style="animation-delay: 0.2s"></div>
-    <div class="bar" style="animation-delay: 0.3s"></div>
-    <div class="bar" style="animation-delay: 0.4s"></div>
-    <div class="bar" style="animation-delay: 0.5s"></div>
-    <div class="bar" style="animation-delay: 0.3s"></div>
-    <div class="bar" style="animation-delay: 0.2s"></div>
-    <div class="bar" style="animation-delay: 0.1s"></div>
-    <div class="bar" style="animation-delay: 0s"></div>
+  <div class="waveform" id="wave">
+    <div class="bar" style="animation-delay:0s"></div>
+    <div class="bar" style="animation-delay:.1s"></div>
+    <div class="bar" style="animation-delay:.2s"></div>
+    <div class="bar" style="animation-delay:.3s"></div>
+    <div class="bar" style="animation-delay:.4s"></div>
+    <div class="bar" style="animation-delay:.5s"></div>
+    <div class="bar" style="animation-delay:.3s"></div>
+    <div class="bar" style="animation-delay:.2s"></div>
+    <div class="bar" style="animation-delay:.1s"></div>
+    <div class="bar" style="animation-delay:0s"></div>
   </div>
 
-  <!-- 麦克风按钮 -->
-  <button class="mic-btn" id="micBtn" disabled>🎤</button>
-  <div class="label" id="micLabel">点击开始麦克风</div>
+  <button class="mic-btn" id="micBtn" disabled>&#127908;</button>
+  <div class="label" id="micLabel">Tap to start mic</div>
 
-  <!-- 喇叭 -->
-  <div class="speaker-section">
-    <h3>🔊 喇叭输出</h3>
-    <div class="speaker-toggle">
-      <span>接收 PC 音频</span>
-      <div class="toggle-switch" id="speakerToggle"></div>
+  <div class="speaker-box">
+    <h3>Speaker Output</h3>
+    <div class="row">
+      <span>Receive PC audio</span>
+      <div class="toggle" id="spkToggle"></div>
     </div>
-    <div class="volume-row">
-      <span>🔈</span>
-      <input type="range" id="volumeSlider" min="0" max="100" value="80">
-      <span>🔊</span>
+    <div class="vol">
+      <span>&#128266;</span>
+      <input type="range" id="volSlider" min="0" max="100" value="80">
+      <span>&#128266;</span>
     </div>
   </div>
 
-  <div class="error-msg" id="errorMsg"></div>
+  <div class="err" id="err"></div>
+  <div class="debug" id="dbg"></div>
 
   <script>
-    // ========== WebSocket 连接 ==========
-    const wsUrl = `ws://${location.host}`;
-    let ws = null;
-    let isConnected = false;
+    var dot = document.getElementById('dot');
+    var statusTxt = document.getElementById('statusTxt');
+    var micBtn = document.getElementById('micBtn');
+    var micLabel = document.getElementById('micLabel');
+    var wave = document.getElementById('wave');
+    var spkToggle = document.getElementById('spkToggle');
+    var volSlider = document.getElementById('volSlider');
+    var errEl = document.getElementById('err');
+    var dbgEl = document.getElementById('dbg');
 
-    // DOM
-    const statusDot = document.getElementById('statusDot');
-    const statusText = document.getElementById('statusText');
-    const micBtn = document.getElementById('micBtn');
-    const micLabel = document.getElementById('micLabel');
-    const waveform = document.getElementById('waveform');
-    const speakerToggle = document.getElementById('speakerToggle');
-    const volumeSlider = document.getElementById('volumeSlider');
-    const errorMsg = document.getElementById('errorMsg');
+    var ws = null;
+    var recording = false;
+    var spkOn = false;
+    var actx = null;
+    var playCtx = null;
+    var gainNode = null;
+    var nextTime = 0;
+    var stream = null;
 
-    // ========== 音频 ==========
-    let audioContext = null;
-    let mediaStream = null;
-    let scriptProcessor = null;
-    let isRecording = false;
-    let speakerEnabled = false;
-    let nextPlayTime = 0;
-    let gainNode = null;
+    function dbg(msg) { dbgEl.textContent = msg; dbgEl.style.display = 'block'; }
 
+    // Connect
     function connect() {
-      ws = new WebSocket(wsUrl);
+      var proto = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+      var url = proto + '//' + location.host;
+      dbg('Connecting to ' + url + '...');
+      try {
+        ws = new WebSocket(url);
+      } catch(e) {
+        errEl.textContent = 'WebSocket error: ' + e.message;
+        errEl.style.display = 'block';
+        return;
+      }
       ws.binaryType = 'arraybuffer';
 
-      ws.onopen = () => {
-        isConnected = true;
-        statusDot.classList.add('connected');
-        statusText.textContent = '已连接';
+      ws.onopen = function() {
+        dot.className = 'status-dot ok';
+        statusTxt.textContent = 'Connected';
         micBtn.disabled = false;
-        errorMsg.style.display = 'none';
+        dbg('Connected!');
+        setTimeout(function(){ dbgEl.style.display='none'; }, 2000);
       };
 
-      ws.onclose = () => {
-        isConnected = false;
-        statusDot.classList.remove('connected');
-        statusText.textContent = '连接断开';
+      ws.onclose = function() {
+        dot.className = 'status-dot';
+        statusTxt.textContent = 'Disconnected';
         micBtn.disabled = true;
         stopMic();
-        // 自动重连
+        dbg('Reconnecting in 3s...');
         setTimeout(connect, 3000);
       };
 
-      ws.onerror = () => {
-        errorMsg.textContent = '❌ 连接失败，请确认 PC 端服务正在运行';
-        errorMsg.style.display = 'block';
+      ws.onerror = function() {
+        errEl.textContent = 'Connection failed';
+        errEl.style.display = 'block';
       };
 
-      ws.onmessage = (event) => {
-        if (typeof event.data === 'string') {
-          // 文本消息
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'connected') {
-              console.log('Server:', msg.message);
-            }
-          } catch (e) {}
-        } else {
-          // 二进制音频数据 → 播放
-          if (speakerEnabled) {
-            playAudio(event.data);
-          }
+      ws.onmessage = function(ev) {
+        if (typeof ev.data === 'string') {
+          try { var m = JSON.parse(ev.data); if(m.type==='connected') dbg('Server confirmed'); } catch(e){}
+        } else if (spkOn) {
+          playChunk(ev.data);
         }
       };
     }
 
-    // ========== 麦克风 ==========
-    async function startMic() {
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: 48000,
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
+    // Mic
+    function startMic() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        errEl.textContent = 'Browser does not support mic access. Try Chrome/Safari.';
+        errEl.style.display = 'block';
+        return;
+      }
+      dbg('Requesting mic permission...');
+      navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate:48000, channelCount:1, echoCancellation:true, noiseSuppression:true }
+      }).then(function(s) {
+        stream = s;
+        actx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate:48000 });
+        var src = actx.createMediaStreamSource(s);
+        var proc = actx.createScriptProcessor(4096, 1, 1);
+        src.connect(proc);
+        proc.connect(actx.destination);
+
+        proc.onaudioprocess = function(e) {
+          if (!recording || !ws || ws.readyState !== 1) return;
+          var f32 = e.inputBuffer.getChannelData(0);
+          var i16 = new Int16Array(f32.length);
+          for (var i = 0; i < f32.length; i++) {
+            var v = f32[i] < 0 ? f32[i] * 0x8000 : f32[i] * 0x7FFF;
+            i16[i] = Math.max(-32768, Math.min(32767, v));
           }
-        });
-
-        audioContext = new (window.AudioContext || window.webkitAudioContext)({
-          sampleRate: 48000,
-        });
-
-        const source = audioContext.createMediaStreamSource(mediaStream);
-
-        // 使用 ScriptProcessor 采集原始 PCM
-        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-        source.connect(scriptProcessor);
-        scriptProcessor.connect(audioContext.destination);
-
-        scriptProcessor.onaudioprocess = (e) => {
-          if (!isRecording || !isConnected) return;
-          const float32 = e.inputBuffer.getChannelData(0);
-          // 转为 Int16 PCM 发送（更高效）
-          const int16 = float32ToInt16(float32);
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(int16.buffer);
-          }
+          ws.send(i16.buffer);
         };
 
-        isRecording = true;
-        micBtn.classList.add('recording');
-        micBtn.textContent = '⏹️';
-        micLabel.textContent = '录音中... 点击停止';
-        statusDot.classList.add('recording');
-        waveform.classList.add('active');
-
-      } catch (err) {
-        errorMsg.textContent = '❌ 无法访问麦克风: ' + err.message;
-        errorMsg.style.display = 'block';
-      }
+        recording = true;
+        micBtn.className = 'mic-btn rec';
+        micBtn.innerHTML = '&#9209;';
+        micLabel.textContent = 'Recording... tap to stop';
+        dot.className = 'status-dot rec';
+        wave.className = 'waveform on';
+      }).catch(function(err) {
+        errEl.textContent = 'Mic error: ' + err.message;
+        errEl.style.display = 'block';
+      });
     }
 
     function stopMic() {
-      isRecording = false;
-
-      if (scriptProcessor) {
-        scriptProcessor.disconnect();
-        scriptProcessor = null;
-      }
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(t => t.stop());
-        mediaStream = null;
-      }
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close();
-        audioContext = null;
-      }
-
-      micBtn.classList.remove('recording');
-      micBtn.textContent = '🎤';
-      micLabel.textContent = '点击开始麦克风';
-      statusDot.classList.remove('recording');
-      waveform.classList.remove('active');
+      recording = false;
+      if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream = null; }
+      if (actx && actx.state !== 'closed') { actx.close(); actx = null; }
+      micBtn.className = 'mic-btn';
+      micBtn.innerHTML = '&#127908;';
+      micLabel.textContent = 'Tap to start mic';
+      dot.className = ws && ws.readyState === 1 ? 'status-dot ok' : 'status-dot';
+      wave.className = 'waveform';
     }
 
-    // Float32 → Int16 PCM
-    function float32ToInt16(float32Array) {
-      const int16 = new Int16Array(float32Array.length);
-      for (let i = 0; i < float32Array.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32Array[i]));
-        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    // Speaker
+    function playChunk(buf) {
+      if (!playCtx) {
+        playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate:48000 });
+        gainNode = playCtx.createGain();
+        gainNode.connect(playCtx.destination);
+        gainNode.gain.value = volSlider.value / 100;
       }
-      return int16;
+      var i16 = new Int16Array(buf);
+      var f32 = new Float32Array(i16.length);
+      for (var i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+      var ab = playCtx.createBuffer(1, f32.length, 48000);
+      ab.copyToChannel(f32, 0);
+      var src = playCtx.createBufferSource();
+      src.buffer = ab;
+      src.connect(gainNode);
+      var now = playCtx.currentTime;
+      if (nextTime < now) nextTime = now;
+      src.start(nextTime);
+      nextTime += ab.duration;
     }
 
-    // ========== 喇叭播放 ==========
-    let playContext = null;
+    // Events
+    micBtn.onclick = function() { recording ? stopMic() : startMic(); };
+    spkToggle.onclick = function() { spkOn = !spkOn; spkToggle.className = spkOn ? 'toggle on' : 'toggle'; };
+    volSlider.oninput = function() { if (gainNode) gainNode.gain.value = volSlider.value / 100; };
 
-    function playAudio(arrayBuffer) {
-      if (!playContext) {
-        playContext = new (window.AudioContext || window.webkitAudioContext)({
-          sampleRate: 48000,
-        });
-        gainNode = playContext.createGain();
-        gainNode.connect(playContext.destination);
-        gainNode.gain.value = volumeSlider.value / 100;
-      }
-
-      // Int16 PCM → Float32
-      const int16 = new Int16Array(arrayBuffer);
-      const float32 = new Float32Array(int16.length);
-      for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 0x8000;
-      }
-
-      const audioBuffer = playContext.createBuffer(1, float32.length, 48000);
-      audioBuffer.copyToChannel(float32, 0);
-
-      const source = playContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(gainNode);
-
-      // 调度播放，避免间隙
-      const now = playContext.currentTime;
-      if (nextPlayTime < now) {
-        nextPlayTime = now;
-      }
-      source.start(nextPlayTime);
-      nextPlayTime += audioBuffer.duration;
-    }
-
-    // ========== 事件绑定 ==========
-    micBtn.addEventListener('click', () => {
-      if (isRecording) {
-        stopMic();
-      } else {
-        startMic();
-      }
-    });
-
-    speakerToggle.addEventListener('click', () => {
-      speakerEnabled = !speakerEnabled;
-      speakerToggle.classList.toggle('active', speakerEnabled);
-    });
-
-    volumeSlider.addEventListener('input', () => {
-      if (gainNode) {
-        gainNode.gain.value = volumeSlider.value / 100;
-      }
-    });
-
-    // ========== 启动 ==========
+    // Start
     connect();
   </script>
 </body>

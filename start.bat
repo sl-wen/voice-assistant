@@ -1,29 +1,27 @@
 @echo off
-chcp 65001 >nul
-title Voice Assistant - 语音助手
+title Voice Assistant
 echo.
-echo 🎙️  Voice Assistant - 语音助手
+echo Voice Assistant - Starting...
 echo.
-echo 正在检查环境...
 
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ 未找到 Node.js，请先安装: https://nodejs.org/
+    echo ERROR: Node.js not found. Install from https://nodejs.org/
     pause
     exit /b 1
 )
 
-echo ✅ Node.js:
+echo Node.js:
 node --version
 
 if not exist node_modules (
     echo.
-    echo 📦 安装依赖...
-    npm install --production
+    echo Installing dependencies...
+    npm install --omit=dev
 )
 
 echo.
-echo 🚀 启动服务...
+echo Starting server...
 echo.
 node server.js
 

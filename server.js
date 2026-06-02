@@ -1,14 +1,10 @@
 /**
- * Voice Assistant Server v0.3
- * PC端服务 - 接收手机音频流
- * 
- * 输出策略：
- *   1. 检测 ffmpeg → 播放到默认音频设备
- *   2. 无 ffmpeg → 保存为 WAV 文件（调试模式）
+ * Voice Assistant Server v0.3.1
  */
 
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { WebSocketServer } = require('ws');
 const qrcode = require('qrcode-terminal');
 const os = require('os');
@@ -20,12 +16,36 @@ const PORT = process.env.PORT || 3000;
 const SAMPLE_RATE = 48000;
 const CHANNELS = 1;
 
-// ========== HTTP Server ==========
 const app = express();
 const server = http.createServer(app);
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ========== 音频输出 ==========
+// Try HTTPS on PORT+1
+let httpsServer = null;
+const HTTPS_PORT = PORT + 1;
+try {
+  const keyPath = path.join(__dirname, 'key.pem');
+  const certPath = path.join(__dirname, 'cert.pem');
+  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    const options = {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    };
+    httpsServer = https.createServer(options, app);
+    httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
+      console.log('[HTTPS] Also available on port ' + HTTPS_PORT + ' (self-signed cert)');
+    });
+    // WebSocket upgrade for HTTPS
+    httpsServer.on('upgrade', (req, socket, head) => {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    });
+  }
+} catch(e) {
+  // HTTPS not available, HTTP only
+}
+
 let ffmpegProcess = null;
 let wavStream = null;
 let wavPath = null;
@@ -33,19 +53,16 @@ let bytesReceived = 0;
 let useFfmpeg = false;
 
 function initAudioOutput() {
-  // 尝试 ffmpeg
   try {
     const test = spawn('ffmpeg', ['-version']);
     test.on('error', () => {
-      console.log('\n⚠️  ffmpeg 未安装');
-      console.log('   → 使用文件保存模式（调试）');
-      console.log('   → 安装 ffmpeg 后可实时播放: https://ffmpeg.org/download.html');
-      console.log('   → 推荐用 winget install Gyan.FFmpeg');
+      console.log('[INFO] ffmpeg not found, using file output mode');
+      console.log('       Install ffmpeg: winget install Gyan.FFmpeg');
       initFileOutput();
     });
     test.on('close', (code) => {
       if (code === 0) {
-        console.log('✅ ffmpeg 已就绪');
+        console.log('[OK] ffmpeg ready');
         initFFmpegOutput();
       } else {
         initFileOutput();
@@ -63,21 +80,20 @@ function initFFmpegOutput() {
     '-ac', String(CHANNELS),
     '-i', 'pipe:0',
     '-f', 'waveaudio',
-    '0',  // 默认音频设备
+    '0',
   ];
-
   try {
     ffmpegProcess = spawn('ffmpeg', args);
     ffmpegProcess.stdin.on('error', () => {});
-    ffmpegProcess.stderr.on('data', () => {}); // 静默
+    ffmpegProcess.stderr.on('data', () => {});
     ffmpegProcess.on('close', (code) => {
       if (code !== 0 && !wavStream) {
-        console.log('⚠️  ffmpeg 播放失败，切换文件模式');
+        console.log('[WARN] ffmpeg failed, fallback to file mode');
         initFileOutput();
       }
     });
     useFfmpeg = true;
-    console.log('🔊 音频 → ffmpeg → 默认音频设备');
+    console.log('[OK] Audio -> ffmpeg -> default device');
   } catch (e) {
     initFileOutput();
   }
@@ -87,14 +103,10 @@ function initFileOutput() {
   const outputDir = path.join(__dirname, 'output');
   fs.mkdirSync(outputDir, { recursive: true });
   wavPath = path.join(outputDir, `recording_${Date.now()}.wav`);
-  
   wavStream = fs.createWriteStream(wavPath);
-  // 写入占位 WAV header（44字节），录音结束后回填
-  const header = Buffer.alloc(44);
-  wavStream.write(header);
-  
-  console.log(`📁 音频保存到: ${wavPath}`);
-  console.log('   按 Ctrl+C 结束后可播放验证');
+  wavStream.write(Buffer.alloc(44));
+  console.log(`[OK] Audio saving to: ${wavPath}`);
+  console.log('     Press Ctrl+C to stop and save');
 }
 
 function writeAudio(data) {
@@ -108,37 +120,32 @@ function writeAudio(data) {
 
 function finalizeWav() {
   if (wavStream && wavPath) {
-    // 回填 WAV header
     const fd = fs.openSync(wavPath, 'r+');
     const header = Buffer.alloc(44);
-    const dataLength = bytesReceived;
-    
     header.write('RIFF', 0);
-    header.writeUInt32LE(36 + dataLength, 4);
+    header.writeUInt32LE(36 + bytesReceived, 4);
     header.write('WAVE', 8);
     header.write('fmt ', 12);
     header.writeUInt32LE(16, 16);
-    header.writeUInt16LE(1, 20);            // PCM
+    header.writeUInt16LE(1, 20);
     header.writeUInt16LE(CHANNELS, 22);
     header.writeUInt32LE(SAMPLE_RATE, 24);
-    header.writeUInt32LE(SAMPLE_RATE * CHANNELS * 2, 28); // byte rate
-    header.writeUInt16LE(CHANNELS * 2, 32); // block align
-    header.writeUInt16LE(16, 34);           // bits per sample
+    header.writeUInt32LE(SAMPLE_RATE * CHANNELS * 2, 28);
+    header.writeUInt16LE(CHANNELS * 2, 32);
+    header.writeUInt16LE(16, 34);
     header.write('data', 36);
-    header.writeUInt32LE(dataLength, 40);
-    
+    header.writeUInt32LE(bytesReceived, 40);
     fs.writeSync(fd, header, 0, 44, 0);
     fs.closeSync(fd);
     wavStream.end();
   }
 }
 
-// ========== WebSocket Server ==========
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws, req) => {
-  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  console.log(`\n📱 手机已连接: ${clientIp} (共 ${wss.clients.size} 个连接)`);
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  console.log(`\n[PHONE] Connected: ${ip} (total: ${wss.clients.size})`);
   bytesReceived = 0;
 
   ws.on('message', (data, isBinary) => {
@@ -148,66 +155,94 @@ wss.on('connection', (ws, req) => {
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
-        else if (msg.type === 'audio-config') console.log(`🎵 配置: rate=${msg.sampleRate}`);
+        else if (msg.type === 'audio-config') console.log(`[AUDIO] config: rate=${msg.sampleRate}`);
       } catch (e) {}
     }
   });
 
   ws.on('close', () => {
-    console.log(`📱 断开 (剩余 ${wss.clients.size})`);
+    console.log(`[PHONE] Disconnected (remaining: ${wss.clients.size})`);
     if (wss.clients.size === 0 && bytesReceived > 0) {
       finalizeWav();
       const sec = (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1);
-      console.log(`📊 本段录音 ${sec} 秒 (${bytesReceived} bytes)`);
+      console.log(`[STATS] Recorded ${sec}s (${bytesReceived} bytes)`);
     }
   });
 
   ws.send(JSON.stringify({ type: 'connected' }));
 });
 
-// ========== IP ==========
-function getLocalIP() {
+function getAllIPs() {
   const interfaces = os.networkInterfaces();
-  const ips = [];
+  const lanIps = [];
+  const otherIps = [];
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        ips.push(iface.address);
+        // Filter out WSL/Hyper-V virtual addresses
+        const isWSL = name.toLowerCase().includes('veth') ||
+                      name.toLowerCase().includes('ws') ||
+                      name.toLowerCase().includes('hyper') ||
+                      iface.address.startsWith('172.16.') ||
+                      iface.address.startsWith('172.20.') ||
+                      iface.address.startsWith('172.24.') ||
+                      iface.address.startsWith('172.25.');
+        if (!isWSL) {
+          lanIps.push({ address: iface.address, iface: name });
+        } else {
+          otherIps.push({ address: iface.address, iface: name });
+        }
       }
     }
   }
-  return ips;
+  return { lanIps, otherIps };
 }
 
-// ========== 启动 ==========
 server.listen(PORT, '0.0.0.0', () => {
-  const ips = getLocalIP();
+  const { lanIps, otherIps } = getAllIPs();
   
-  console.log('\n🎙️  Voice Assistant - 语音助手');
-  console.log('═'.repeat(40));
+  console.log('\n=== Voice Assistant ===');
+  console.log('Server running on port ' + PORT + '\n');
 
-  for (const ip of ips) {
-    const url = `http://${ip}:${PORT}`;
-    console.log(`\n📡 ${ip}:`);
-    console.log(`   手机访问: ${url}`);
-    console.log(`   二维码:\n`);
-    qrcode.generate(url, { small: true });
+  // Show all IPs for debugging
+  if (lanIps.length === 0 && otherIps.length === 0) {
+    console.log('[WARN] No external IP found!');
+    console.log('Try: http://localhost:' + PORT);
   }
 
-  console.log('\n' + '═'.repeat(40));
+  // Prefer real LAN IPs
+  const showIps = lanIps.length > 0 ? lanIps : otherIps;
+  for (const item of showIps) {
+    const url = 'http://' + item.address + ':' + PORT;
+    const httpsUrl = 'https://' + item.address + ':' + HTTPS_PORT;
+    console.log('[' + item.iface + '] ' + item.address);
+    console.log('\n[HTTP] ' + url + ' (may not support mic)\n');
+    qrcode.generate(url, { small: true });
+    console.log('\n[HTTPS] ' + httpsUrl + ' (use this for mic access)\n');
+    qrcode.generate(httpsUrl, { small: true });
+    console.log('');
+  }
+
+  // Also show filtered-out IPs for reference
+  if (lanIps.length > 0 && otherIps.length > 0) {
+    console.log('(Ignored virtual IPs: ' + otherIps.map(i=>i.address).join(', ') + ')');
+    console.log('');
+  }
+
+  console.log('='.repeat(30));
   initAudioOutput();
-  console.log('\n⏳ 等待手机连接...\n');
+  console.log('\nWaiting for phone connection...\n');
 });
 
 process.on('SIGINT', () => {
-  console.log('\n\n🛑 关闭中...');
+  console.log('\n\n[STOP] Shutting down...');
   if (ffmpegProcess) ffmpegProcess.kill();
   finalizeWav();
   if (bytesReceived > 0) {
     const sec = (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1);
-    console.log(`📊 总计录音 ${sec} 秒`);
+    console.log(`[STATS] Total: ${sec}s`);
   }
-  if (wavPath) console.log(`📁 文件: ${wavPath}`);
+  if (wavPath) console.log(`[FILE] ${wavPath}`);
   server.close();
   process.exit(0);
 });
