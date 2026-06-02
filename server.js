@@ -1,17 +1,15 @@
 /**
- * Voice Assistant Server v0.4 - Bidirectional
+ * Voice Assistant Server v0.5
+ * Clean rewrite - phone mic -> PC speaker
  * 
- * Direction 1: Phone Mic -> PC (already working)
- * Direction 2: PC Audio -> Phone Speaker
- * 
- * PC audio capture strategy (Windows):
- *   1. ffmpeg recording from Windows audio device (wasapi)
- *   2. If no ffmpeg: skip direction 2
+ * Zero dependency audio playback on Windows:
+ *   Uses PowerShell + .NET NAudio-style approach
+ *   Falls back to WAV file if PS not available
  */
 
 const express = require('express');
-const http = require('http'); // fallback only
 const https = require('https');
+const http = require('http');
 const { WebSocketServer } = require('ws');
 const qrcode = require('qrcode-terminal');
 const os = require('os');
@@ -21,73 +19,145 @@ const { spawn } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const SAMPLE_RATE = 48000;
-const CHANNELS = 1;
 
+// ========== Express ==========
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ========== Audio Output (Phone -> PC) ==========
-let outputFfmpeg = null;
-let wavStream = null;
+// ========== WebSocket (noServer) ==========
+const wss = new WebSocketServer({ noServer: true });
+
+// ========== Audio Output ==========
+let audioProcess = null;
+let audioMode = 'none'; // 'ps' | 'file' | 'none'
+let wavFd = null;
 let wavPath = null;
 let bytesReceived = 0;
-let useFfmpegOut = false;
+const audioBuffer = [];  // Buffer incoming data until audio process is ready
 
 function initAudioOutput() {
-  try {
-    const test = spawn('ffmpeg', ['-version']);
-    test.on('error', () => { initFileOutput(); });
-    test.on('close', (code) => {
-      if (code === 0) { initFfmpegOutput(); } else { initFileOutput(); }
-    });
-  } catch (e) { initFileOutput(); }
-}
-
-function initFfmpegOutput() {
-  // Try PowerShell audio bridge first (zero dependency)
   if (process.platform === 'win32') {
-    tryPSAudioBridge();
-    return;
+    initPSAudio();
+  } else {
+    initFileOutput();
   }
-  // Fallback to ffmpeg for non-Windows
-  const args = ['-f','s16le','-ar',String(SAMPLE_RATE),'-ac',String(CHANNELS),'-i','pipe:0','-f','waveaudio','0'];
-  try {
-    outputFfmpeg = spawn('ffmpeg', args);
-    outputFfmpeg.stdin.on('error', () => {});
-    outputFfmpeg.stderr.on('data', () => {});
-    outputFfmpeg.on('close', () => { if (!wavStream) initFileOutput(); });
-    useFfmpegOut = true;
-    console.log('[OUT] Audio -> ffmpeg -> default device');
-  } catch (e) { initFileOutput(); }
 }
 
-function tryPSAudioBridge() {
-  const psPath = path.join(__dirname, 'native', 'AudioBridge.ps1');
-  if (!fs.existsSync(psPath)) {
-    console.log('[OUT] AudioBridge.ps1 not found, fallback to file');
-    initFileOutput();
-    return;
-  }
+function initPSAudio() {
+  // Use a minimal inline PowerShell script to play PCM
+  // Writes raw PCM to a temp WAV file and plays it in chunks
+  const psScript = `
+    $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(48000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+    # Just tell Node we're ready
+    Write-Output "READY"
+  `;
+
+  // Better approach: Use .NET MediaPlayer via PowerShell
+  // But actually, the simplest zero-dep approach is:
+  // Node.js -> write to temp .wav -> PowerShell plays it
+  
+  // For REAL-TIME: Use node's built-in speaker capability
+  // Since we need real-time streaming, let's use a pipe approach
+  // with PowerShell reading stdin
+
   try {
-    outputFfmpeg = spawn('powershell.exe', [
+    // Create a PowerShell process that reads PCM from stdin and plays via WinMM
+    const inlinePS = `
+Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
+
+public class PCMPlayer {
+    [DllImport("winmm.dll")] public static extern int waveOutOpen(out IntPtr h, int id, ref F fmt, IntPtr cb, IntPtr inst, int flags);
+    [DllImport("winmm.dll")] public static extern int waveOutPrepareHeader(IntPtr h, IntPtr hdr, int sz);
+    [DllImport("winmm.dll")] public static extern int waveOutWrite(IntPtr h, IntPtr hdr, int sz);
+    [DllImport("winmm.dll")] public static extern int waveOutUnprepareHeader(IntPtr h, IntPtr hdr, int sz);
+    [DllImport("winmm.dll")] public static extern int waveOutClose(IntPtr h);
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct F { public short tag; public short ch; public int sr; public int br; public short ba; public short bps; public short cb; }
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct H { public IntPtr data; public int len; public int rec; public IntPtr user; public int flags; public int loops; public IntPtr next; public IntPtr res; }
+    
+    public static void Play(Stream stdin) {
+        F fmt = new F();
+        fmt.tag = 1; fmt.ch = 1; fmt.sr = 48000; fmt.bps = 16;
+        fmt.ba = 2; fmt.br = 96000; fmt.cb = 0;
+        
+        IntPtr hw;
+        if (waveOutOpen(out hw, -1, ref fmt, IntPtr.Zero, IntPtr.Zero, 0) != 0) {
+            Console.Error.WriteLine("OPEN_FAIL"); return;
+        }
+        
+        byte[] buf = new byte[9600];
+        while (true) {
+            int r = stdin.Read(buf, 0, buf.Length);
+            if (r <= 0) break;
+            
+            IntPtr p = Marshal.AllocHGlobal(r);
+            Marshal.Copy(buf, 0, p, r);
+            
+            H hdr = new H();
+            hdr.data = p;
+            hdr.len = r;
+            
+            IntPtr hp = Marshal.AllocHGlobal(Marshal.SizeOf(hdr));
+            Marshal.StructureToPtr(hdr, hp, false);
+            
+            waveOutPrepareHeader(hw, hp, Marshal.SizeOf(hdr));
+            waveOutWrite(hw, hp, Marshal.SizeOf(hdr));
+            
+            int wait = 0;
+            while (wait < 2000) {
+                Thread.Sleep(1);
+                H cur = (H)Marshal.PtrToStructure(hp, typeof(H));
+                if ((cur.flags & 1) != 0) break;
+                wait++;
+            }
+            
+            waveOutUnprepareHeader(hw, hp, Marshal.SizeOf(hdr));
+            Marshal.FreeHGlobal(p);
+            Marshal.FreeHGlobal(hp);
+        }
+        waveOutClose(hw);
+    }
+}
+"@
+
+[PCMPlayer]::Play([Console]::OpenStandardInput())
+`;
+
+    audioProcess = spawn('powershell.exe', [
       '-ExecutionPolicy', 'Bypass',
       '-NoProfile',
-      '-File', psPath,
-      '-Mode', 'Play'
+      '-NonInteractive',
+      '-Command', inlinePS
     ]);
-    outputFfmpeg.stdin.on('error', () => {});
-    outputFfmpeg.stderr.on('data', (d) => {
+
+    audioProcess.stdin.on('error', () => {});
+    audioProcess.stderr.on('data', (d) => {
       const s = d.toString().trim();
-      if (s) console.log('[PS] ' + s);
+      if (s && s !== 'READY') console.log('[PS-AUDIO] ' + s);
     });
-    outputFfmpeg.on('close', (code) => {
-      useFfmpegOut = false;
-      if (!wavStream) initFileOutput();
+    audioProcess.on('close', (code) => {
+      console.log('[PS-AUDIO] Exited (code ' + code + ')');
+      audioProcess = null;
+      audioMode = 'none';
     });
-    useFfmpegOut = true;
-    console.log('[OUT] Audio -> PowerShell AudioBridge -> speaker');
+    audioProcess.on('error', (e) => {
+      console.log('[PS-AUDIO] Error: ' + e.message);
+      audioProcess = null;
+      initFileOutput();
+    });
+
+    audioMode = 'ps';
+    console.log('[OUT] Audio -> PowerShell WinMM -> default speaker');
+
   } catch (e) {
-    console.log('[OUT] PowerShell bridge failed: ' + e.message);
+    console.log('[OUT] PS failed: ' + e.message);
     initFileOutput();
   }
 }
@@ -95,193 +165,89 @@ function tryPSAudioBridge() {
 function initFileOutput() {
   const dir = path.join(__dirname, 'output');
   fs.mkdirSync(dir, { recursive: true });
-  wavPath = path.join(dir, `recording_${Date.now()}.wav`);
-  wavStream = fs.createWriteStream(wavPath);
-  wavStream.write(Buffer.alloc(44));
+  wavPath = path.join(dir, 'recording_' + Date.now() + '.wav');
+  wavFd = fs.openSync(wavPath, 'w');
+  // Placeholder WAV header
+  fs.writeSync(wavFd, Buffer.alloc(44));
+  audioMode = 'file';
   console.log('[OUT] Saving to: ' + wavPath);
+  console.log('     Ctrl+C to stop and play the file');
 }
 
-function writePCMAudio(data) {
+function writeAudio(data) {
   bytesReceived += data.length;
-  if (useFfmpegOut && outputFfmpeg && outputFfmpeg.stdin.writable) {
-    outputFfmpeg.stdin.write(data);
-  } else if (wavStream) {
-    wavStream.write(data);
+  if (audioMode === 'ps' && audioProcess && audioProcess.stdin.writable) {
+    audioProcess.stdin.write(data);
+  } else if (audioMode === 'file' && wavFd) {
+    fs.writeSync(wavFd, data);
   }
 }
 
-function finalizeWav() {
-  if (wavStream && wavPath) {
-    const fd = fs.openSync(wavPath, 'r+');
+function closeAudio() {
+  if (audioProcess) {
+    audioProcess.stdin.end();
+    audioProcess = null;
+  }
+  if (wavFd && wavPath) {
+    // Fix WAV header
     const h = Buffer.alloc(44);
-    h.write('RIFF',0); h.writeUInt32LE(36+bytesReceived,4); h.write('WAVE',8);
-    h.write('fmt ',12); h.writeUInt32LE(16,16); h.writeUInt16LE(1,20);
-    h.writeUInt16LE(CHANNELS,22); h.writeUInt32LE(SAMPLE_RATE,24);
-    h.writeUInt32LE(SAMPLE_RATE*CHANNELS*2,28); h.writeUInt16LE(CHANNELS*2,32);
-    h.writeUInt16LE(16,34); h.write('data',36); h.writeUInt32LE(bytesReceived,40);
-    fs.writeSync(fd, h, 0, 44, 0);
-    fs.closeSync(fd);
-    wavStream.end();
+    h.write('RIFF', 0); h.writeUInt32LE(36 + bytesReceived, 4);
+    h.write('WAVE', 8); h.write('fmt ', 12);
+    h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20);
+    h.writeUInt16LE(1, 22); h.writeUInt32LE(SAMPLE_RATE, 24);
+    h.writeUInt32LE(SAMPLE_RATE * 2, 28);
+    h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+    h.write('data', 36); h.writeUInt32LE(bytesReceived, 40);
+    fs.writeSync(wavFd, h, 0, 44, 0);
+    fs.closeSync(wavFd);
+    wavFd = null;
+    if (bytesReceived > 0) console.log('[FILE] Saved: ' + wavPath + ' (' + (bytesReceived / SAMPLE_RATE / 2).toFixed(1) + 's)');
   }
 }
 
-// ========== Audio Input (PC -> Phone) ==========
-let captureProcess = null;
-let capturing = false;
-
-function startPCAudioCapture(broadcastFn) {
-  // Use ffmpeg to capture Windows audio via WASAPI (loopback)
-  // This captures whatever is playing on the PC speakers
-  const args = [
-    '-f', 'dshow',           // DirectShow (Windows)
-    '-i', 'audio=Stereo Mix (Realtek(R) Audio)',  // Try stereo mix first
-    '-f', 's16le',
-    '-ar', String(SAMPLE_RATE),
-    '-ac', String(CHANNELS),
-    'pipe:1'                  // Output raw PCM to stdout
-  ];
-
-  // Alternative: WASAPI loopback
-  const wasapiArgs = [
-    '-f', 'wasapi',
-    '-i', 'default',          // Default audio output device (loopback)
-    '-f', 's16le',
-    '-ar', String(SAMPLE_RATE),
-    '-ac', String(CHANNELS),
-    'pipe:1'
-  ];
-
-  console.log('[IN] Starting PC audio capture...');
-
-  // Try WASAPI first (more reliable for capturing system audio)
-  tryStartCapture(wasapiArgs, broadcastFn, function() {
-    // Fallback: try dshow with stereo mix
-    console.log('[IN] WASAPI failed, trying Stereo Mix...');
-    tryStartCapture(args, broadcastFn, function() {
-      console.log('[IN] No capture method available.');
-      console.log('     Install VB-Audio Virtual Cable for system audio capture:');
-      console.log('     https://vb-audio.com/Cable/');
-      console.log('     Or use ffmpeg with wasapi support.');
-    });
-  });
-}
-
-function tryStartCapture(args, broadcastFn, onFail) {
-  try {
-    captureProcess = spawn('ffmpeg', args);
-    let started = false;
-
-    captureProcess.stderr.on('data', (data) => {
-      const str = data.toString();
-      if (!started && str.includes('Stream #')) {
-        started = true;
-        capturing = true;
-        console.log('[IN] PC audio capture started');
-      }
-    });
-
-    captureProcess.stdout.on('data', (data) => {
-      if (!capturing) return;
-      // Broadcast PCM data to all connected phones
-      broadcastFn(data);
-    });
-
-    captureProcess.on('close', (code) => {
-      capturing = false;
-      console.log('[IN] Capture stopped (code: ' + code + ')');
-      if (!started && onFail) onFail();
-    });
-
-    captureProcess.on('error', (e) => {
-      capturing = false;
-      if (onFail) onFail();
-    });
-
-    // Timeout: if not started in 3s, fail
-    setTimeout(() => {
-      if (!started && onFail) {
-        captureProcess.kill();
-        onFail();
-      }
-    }, 3000);
-
-  } catch (e) {
-    if (onFail) onFail();
-  }
-}
-
-function stopPCAudioCapture() {
-  if (captureProcess) {
-    captureProcess.kill();
-    captureProcess = null;
-    capturing = false;
-  }
-}
-
-// ========== WebSocket Server ==========
-const wss = new WebSocketServer({ noServer: true });
-
+// ========== WebSocket ==========
 wss.on('connection', (ws, req) => {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  console.log(`\n[PHONE] Connected: ${ip} (total: ${wss.clients.size})`);
+  console.log('\n[PHONE] Connected: ' + ip + ' (total: ' + wss.clients.size + ')');
   bytesReceived = 0;
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
-      writePCMAudio(data);
+      writeAudio(data);
     } else {
       try {
         const msg = JSON.parse(data.toString());
-        switch(msg.type) {
-          case 'ping': ws.send(JSON.stringify({ type: 'pong' })); break;
-          case 'audio-config': console.log('[AUDIO] config: rate=' + msg.sampleRate); break;
-          case 'start-pc-audio':
-            console.log('[IN] Phone requested PC audio');
-            startPCAudioCapture((pcmData) => {
-              if (ws.readyState === 1) ws.send(pcmData);
-            });
-            break;
-          case 'stop-pc-audio':
-            console.log('[IN] Phone stopped PC audio');
-            stopPCAudioCapture();
-            break;
-        }
+        if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+        else if (msg.type === 'audio-config') console.log('[AUDIO] rate=' + msg.sampleRate);
       } catch (e) {}
     }
   });
 
   ws.on('close', () => {
-    console.log(`[PHONE] Disconnected (remaining: ${wss.clients.size})`);
-    stopPCAudioCapture();
-    if (wss.clients.size === 0 && bytesReceived > 0) {
-      finalizeWav();
-      const sec = (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1);
-      console.log(`[STATS] Recorded ${sec}s`);
-    }
+    console.log('[PHONE] Disconnected (remaining: ' + wss.clients.size + ')');
   });
 
   ws.send(JSON.stringify({ type: 'connected' }));
 });
 
-// ========== Server (HTTPS only) ==========
+// ========== HTTPS Server ==========
 let httpsServer = null;
 const keyPath = path.join(__dirname, 'key.pem');
 const certPath = path.join(__dirname, 'cert.pem');
 
 if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-  httpsServer = https.createServer({
-    key: fs.readFileSync(keyPath),
-    cert: fs.readFileSync(certPath),
-  }, app);
+  httpsServer = https.createServer({ key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }, app);
 } else {
-  console.log('[WARN] No cert found, using HTTP (mic may not work on phone)');
+  console.log('[WARN] No cert, using HTTP');
   httpsServer = http.createServer(app);
 }
 
-httpsServer.listen(PORT, '0.0.0.0', () => {
-  httpsServer.on('upgrade', (req, socket, head) => {
-    wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); });
-  });
+// WebSocket upgrade
+httpsServer.on('upgrade', (req, socket, head) => {
+  wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); });
+});
+
+// ========== IP ==========
 function getAllIPs() {
   const interfaces = os.networkInterfaces();
   const lanIps = [], otherIps = [];
@@ -304,29 +270,26 @@ function getAllIPs() {
 }
 
 // ========== Start ==========
-  console.log('\n=== Voice Assistant v0.4 (Bidirectional) ===\n');
+httpsServer.listen(PORT, '0.0.0.0', () => {
+  const { lanIps, otherIps } = getAllIPs();
+  console.log('\n=== Voice Assistant v0.5 ===\n');
 
   const showIps = lanIps.length > 0 ? lanIps : otherIps;
   for (const item of showIps) {
     const url = 'https://' + item.address + ':' + PORT;
-    console.log('[' + item.iface + '] ' + item.address);
-    console.log('\nScan QR code:\n');
+    console.log('[' + item.iface + '] ' + item.address + '\n');
     qrcode.generate(url, { small: true });
     console.log('');
   }
 
-  console.log('='.repeat(40));
+  console.log('='.repeat(35));
   initAudioOutput();
-  console.log('\nWaiting for phone connection...\n');
+  console.log('\nWaiting for phone...\n');
 });
 
 process.on('SIGINT', () => {
-  console.log('\n\n[STOP]');
-  stopPCAudioCapture();
-  if (outputFfmpeg) outputFfmpeg.kill();
-  finalizeWav();
-  if (bytesReceived > 0) console.log('[STATS] Total: ' + (bytesReceived / (SAMPLE_RATE * 2)).toFixed(1) + 's');
-  if (wavPath) console.log('[FILE] ' + wavPath);
-  if (httpsServer) httpsServer.close();
+  console.log('\n[STOP]');
+  closeAudio();
+  httpsServer.close();
   process.exit(0);
 });
