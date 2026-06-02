@@ -44,6 +44,12 @@ function initAudioOutput() {
 }
 
 function initFfmpegOutput() {
+  // Try PowerShell audio bridge first (zero dependency)
+  if (process.platform === 'win32') {
+    tryPSAudioBridge();
+    return;
+  }
+  // Fallback to ffmpeg for non-Windows
   const args = ['-f','s16le','-ar',String(SAMPLE_RATE),'-ac',String(CHANNELS),'-i','pipe:0','-f','waveaudio','0'];
   try {
     outputFfmpeg = spawn('ffmpeg', args);
@@ -53,6 +59,37 @@ function initFfmpegOutput() {
     useFfmpegOut = true;
     console.log('[OUT] Audio -> ffmpeg -> default device');
   } catch (e) { initFileOutput(); }
+}
+
+function tryPSAudioBridge() {
+  const psPath = path.join(__dirname, 'native', 'AudioBridge.ps1');
+  if (!fs.existsSync(psPath)) {
+    console.log('[OUT] AudioBridge.ps1 not found, fallback to file');
+    initFileOutput();
+    return;
+  }
+  try {
+    outputFfmpeg = spawn('powershell.exe', [
+      '-ExecutionPolicy', 'Bypass',
+      '-NoProfile',
+      '-File', psPath,
+      '-Mode', 'Play'
+    ]);
+    outputFfmpeg.stdin.on('error', () => {});
+    outputFfmpeg.stderr.on('data', (d) => {
+      const s = d.toString().trim();
+      if (s) console.log('[PS] ' + s);
+    });
+    outputFfmpeg.on('close', (code) => {
+      useFfmpegOut = false;
+      if (!wavStream) initFileOutput();
+    });
+    useFfmpegOut = true;
+    console.log('[OUT] Audio -> PowerShell AudioBridge -> speaker');
+  } catch (e) {
+    console.log('[OUT] PowerShell bridge failed: ' + e.message);
+    initFileOutput();
+  }
 }
 
 function initFileOutput() {
