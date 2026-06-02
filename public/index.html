@@ -136,6 +136,7 @@
 
   <div class="err" id="err"></div>
   <div class="dbg" id="dbg"></div>
+  <div style="color:#444;font-size:10px;margin-top:8px;text-align:center" id="log"></div>
 
   <script>
     var dot=document.getElementById('dot'), stxt=document.getElementById('stxt');
@@ -147,9 +148,10 @@
 
     var ws=null, recording=false, spkOn=false;
     var actx=null, playCtx=null, gainNode=null, nextTime=0, stream=null;
-    var micBytes=0, spkBytes=0, pingTimer=null;
+    var micBytes=0, spkBytes=0, pingTimer=null, logEl=document.getElementById('log');
 
     function dbg(m){dbgEl.textContent=m;}
+    function log(m){logEl.textContent=new Date().toLocaleTimeString()+' '+m;}
     function fmt(b){return b>1048576?(b/1048576).toFixed(1)+' MB':b>1024?(b/1024).toFixed(1)+' KB':b+' B';}
 
     // ===== Connect =====
@@ -170,6 +172,7 @@
 
       ws.onopen=function(){
         clearTimeout(t);
+        log('ws open');
         dot.className='dot ok'; stxt.textContent='Connected';
         micBtn.disabled=false;
         // Start heartbeat
