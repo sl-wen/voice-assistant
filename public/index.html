@@ -147,7 +147,7 @@
 
     var ws=null, recording=false, spkOn=false;
     var actx=null, playCtx=null, gainNode=null, nextTime=0, stream=null;
-    var micBytes=0, spkBytes=0;
+    var micBytes=0, spkBytes=0, pingTimer=null;
 
     function dbg(m){dbgEl.textContent=m;}
     function fmt(b){return b>1048576?(b/1048576).toFixed(1)+' MB':b>1024?(b/1024).toFixed(1)+' KB':b+' B';}
@@ -162,15 +162,25 @@
 
       ws.onopen=function(){
         dot.className='dot ok'; stxt.textContent='Connected';
-        micBtn.disabled=false; dbg('Connected!');
-        setTimeout(function(){dbgEl.textContent='';},2000);
+        micBtn.disabled=false;
+        dbg('');
+        // Start heartbeat
+        clearInterval(pingTimer);
+        pingTimer=setInterval(function(){
+          if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
+        },5000);
       };
       ws.onclose=function(){
-        dot.className='dot'; stxt.textContent='Disconnected';
+        clearInterval(pingTimer);
+        dot.className='dot'; stxt.textContent='Reconnecting...';
         micBtn.disabled=true; stopMic(); stopSpeaker();
-        dbg('Reconnecting...'); setTimeout(connect,3000);
+        setTimeout(connect,2000);
       };
-      ws.onerror=function(){errEl.textContent='Connection failed';errEl.style.display='block';};
+      ws.onerror=function(){
+        clearInterval(pingTimer);
+        dot.className='dot'; stxt.textContent='Connecting...';
+        setTimeout(connect,3000);
+      };
       ws.onmessage=function(ev){
         if(typeof ev.data==='string'){
           try{var m=JSON.parse(ev.data);if(m.type==='connected')dbg('Server OK');}catch(e){}
