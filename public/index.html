@@ -229,6 +229,7 @@
           // Binary = PC audio
           spkBytes+=ev.data.byteLength;
           statSpk.textContent=fmt(spkBytes);
+          if(spkBytes<3000) log('PC audio: '+ev.data.byteLength+' bytes');
           if(spkOn) playChunk(ev.data);
         }
       };
@@ -288,7 +289,11 @@
         gainNode=playCtx.createGain();
         gainNode.connect(playCtx.destination);
         gainNode.gain.value=spkVol.value/100;
+        log('AudioContext created, state='+playCtx.state);
+        // Resume if suspended (mobile browser policy)
+        if(playCtx.state==='suspended') playCtx.resume();
       }
+      _chunkCount=0;
       // Tell server to start sending PC audio
       if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'start-pc-audio'}));
       dbg('Receiving PC audio...');
@@ -302,9 +307,12 @@
       if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'stop-pc-audio'}));
     }
 
+    var _chunkCount=0;
     function playChunk(buf){
       if(!playCtx)return;
       var i16=new Int16Array(buf);
+      _chunkCount++;
+      if(_chunkCount<=3) log('chunk#'+_chunkCount+' '+i16.length+' samples, '+buf.byteLength+' bytes');
       var f32=new Float32Array(i16.length);
       for(var i=0;i<i16.length;i++) f32[i]=i16[i]/32768;
       var ab=playCtx.createBuffer(1,f32.length,48000);

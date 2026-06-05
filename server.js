@@ -152,12 +152,15 @@ function sendToPhone(data) {
     return;
   }
   // LAN mode: send to all connected phones
+  const sent = [];
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(data, { binary: true });
       bytesSent += data.length;
+      sent.push('yes');
     }
   });
+  if (sent.length === 0) console.log('[SEND] No phone connected to receive');
 }
 
 function startPcAudioCapture() {
@@ -194,11 +197,13 @@ function startPcAudioCapture() {
 }
 
 function launchCapture(exePath) {
+  console.log('[CAPTURE] Launching: ' + exePath + ' ' + SAMPLE_RATE);
   captureProcess = spawn(exePath, [SAMPLE_RATE.toString()], { stdio: ['pipe','pipe','pipe'] });
   captureActive = true;
 
   captureProcess.stdout.on('data', (chunk) => {
     if (!captureActive) return;
+    console.log('[CAPTURE] stdout: ' + chunk.length + ' bytes');
     sendToPhone(chunk);
   });
 
