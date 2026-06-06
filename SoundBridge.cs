@@ -140,6 +140,7 @@ class SoundBridge : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
+        Icon = SystemIcons.Exclamation;
 
         var title = new Label();
         title.Text = "🔊 SoundBridge";
@@ -196,8 +197,8 @@ class SoundBridge : Form
     void SetupTray()
     {
         trayIcon = new NotifyIcon();
-        trayIcon.Icon = SystemIcons.Application;
-        trayIcon.Text = "SoundBridge";
+        trayIcon.Icon = SystemIcons.Exclamation; // 黄色三角，更醒目
+        trayIcon.Text = "SoundBridge - 运行中";
         trayIcon.Visible = true;
         trayIcon.DoubleClick += (s, e) => { Show(); WindowState = FormWindowState.Normal; };
 
