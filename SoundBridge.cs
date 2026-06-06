@@ -53,87 +53,81 @@ class SoundBridge : Form
         string exePath = Assembly.GetExecutingAssembly().Location;
         runDir = Path.GetDirectoryName(exePath);
 
-        // 检查 EXE 尾部是否有嵌入的 ZIP
-        byte[] zipSignature = new byte[] { 0x50, 0x4B, 0x03, 0x04 }; // PK\x03\x04
-        byte[] buffer = new byte[4];
-
-        using (var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read))
+        try
         {
-            // 从后往前找 ZIP 签名（ZIP 文件的 End of Central Directory）
-            // EOCD signature: 50 4B 05 06
-            byte[] eocdSig = new byte[] { 0x50, 0x4B, 0x05, 0x06 };
-            long pos = fs.Length - 22; // EOCD min 22 bytes from end
-            bool foundZip = false;
-
-            while (pos > fs.Length / 2 && pos > 0)
+            using (var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read))
             {
-                fs.Position = pos;
-                fs.Read(buffer, 0, 4);
-                if (buffer[0] == eocdSig[0] && buffer[1] == eocdSig[1] &&
-                    buffer[2] == eocdSig[2] && buffer[3] == eocdSig[3])
-                {
-                    foundZip = true;
-                    break;
-                }
-                pos--;
-            }
+                // 从末尾搜索 ZIP EOCD signature (50 4B 05 06)
+                byte[] eocdSig = { 0x50, 0x4B, 0x05, 0x06 };
+                byte[] buf = new byte[4];
+                long pos = fs.Length - 22;
+                bool foundZip = false;
 
-            if (foundZip)
-            {
-                Log("检测到内嵌数据包，正在解压...");
-                string tempDir = Path.Combine(Path.GetTempPath(), "SoundBridge_" + DateTime.Now.Ticks);
-                
-                // 读取 ZIP 部分：从第一个 PK\x03\x04 开始
-                // 简单方法：把整个 EXE 当 ZIP 读（ZipArchive 会自动跳过非 ZIP 前缀）
-                fs.Position = 0;
-                
-                // 找到第一个 PK\x03\x04
-                long zipStart = -1;
-                long searchStart = fs.Length / 2; // ZIP 肯定在后半部分
-                fs.Position = searchStart;
-                while (fs.Position < fs.Length - 4)
+                while (pos > 0)
                 {
-                    fs.Read(buffer, 0, 4);
-                    if (buffer[0] == zipSignature[0] && buffer[1] == zipSignature[1] &&
-                        buffer[2] == zipSignature[2] && buffer[3] == zipSignature[3])
+                    fs.Position = pos;
+                    fs.Read(buf, 0, 4);
+                    if (buf[0] == eocdSig[0] && buf[1] == eocdSig[1] && buf[2] == eocdSig[2] && buf[3] == eocdSig[3])
                     {
-                        zipStart = fs.Position - 4;
+                        foundZip = true;
                         break;
                     }
+                    pos--;
                 }
 
-                if (zipStart >= 0)
+                if (foundZip)
                 {
-                    // 提取 ZIP 数据
-                    int zipLen = (int)(fs.Length - zipStart);
-                    byte[] zipData = new byte[zipLen];
-                    fs.Position = zipStart;
-                    fs.Read(zipData, 0, zipLen);
+                    // EOCD structure (22+ bytes):
+                    //  0-3: signature, 4-5: disk#, 6-7: startDisk, 8-9: entriesOnDisk
+                    // 10-11: totalEntries, 12-15: centralDirSize, 16-19: centralDirOffset
+                    fs.Position = pos + 12;
+                    byte[] cdInfo = new byte[8];
+                    fs.Read(cdInfo, 0, 8);
+                    int cdSize = BitConverter.ToInt32(cdInfo, 0);
+                    int cdOffset = BitConverter.ToInt32(cdInfo, 4);
 
-                    // 解压
-                    Directory.CreateDirectory(tempDir);
-                    using (var ms = new MemoryStream(zipData))
-                    using (var archive = new ZipArchive(ms, ZipArchiveMode.Read))
+                    // zipStart = EOCD_pos - cdSize - cdOffset
+                    long zipStart = pos - cdSize - cdOffset;
+
+                    if (zipStart > 0 && zipStart < fs.Length)
                     {
-                        foreach (var entry in archive.Entries)
+                        Log("检测到内嵌数据包，正在解压...");
+                        string tempDir = Path.Combine(Path.GetTempPath(), "SoundBridge");
+                        try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+                        Directory.CreateDirectory(tempDir);
+
+                        int zipLen = (int)(fs.Length - zipStart);
+                        byte[] zipData = new byte[zipLen];
+                        fs.Position = zipStart;
+                        fs.Read(zipData, 0, zipLen);
+
+                        using (var ms = new MemoryStream(zipData))
+                        using (var archive = new ZipArchive(ms, ZipArchiveMode.Read))
                         {
-                            string dest = Path.Combine(tempDir, entry.FullName);
-                            string dir = Path.GetDirectoryName(dest);
-                            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                            if (entry.Length > 0)
+                            foreach (var entry in archive.Entries)
                             {
-                                using (var es = entry.Open())
-                                using (var df = File.Create(dest))
+                                string dest = Path.Combine(tempDir, entry.FullName);
+                                string dir = Path.GetDirectoryName(dest);
+                                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                                if (entry.Length > 0)
                                 {
-                                    es.CopyTo(df);
+                                    using (var es = entry.Open())
+                                    using (var df = File.Create(dest))
+                                    {
+                                        es.CopyTo(df);
+                                    }
                                 }
                             }
                         }
+                        runDir = tempDir;
+                        Log("解压完成: " + tempDir);
                     }
-                    runDir = tempDir;
-                    Log("解压完成: " + tempDir);
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Log("解压跳过: " + ex.Message);
         }
 
         StartServer();
