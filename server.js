@@ -178,7 +178,7 @@ function startPcAudioCapture() {
     // Compile C# -> exe
     const csc = spawn('cmd.exe', ['/c',
       'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
-      '/unsafe', '/optimize', '/out:' + exePath, csPath
+      '/unsafe', '/optimize', '/platform:x64', '/out:' + exePath, csPath
     ]);
     let err = '';
     csc.stderr.on('data', d => err += d);
