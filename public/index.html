@@ -77,49 +77,107 @@
     .stxt{font-size:14px;font-weight:600;color:#e2e8f0;}
     .conn-sub{font-size:11px;color:#64748b;}
 
-    /* ===== Mic Section ===== */
-    .mic-section{
+    /* ===== Card Base (shared for mic & speaker) ===== */
+    .card{
       width:100%;max-width:400px;
+      border-radius:20px;
+      padding:24px 20px 28px;
       display:flex;flex-direction:column;align-items:center;
-      padding:24px 0 28px;
+      margin-bottom:16px;
+      position:relative;
+      overflow:hidden;
     }
-    .section-label{
-      font-size:13px;font-weight:600;color:#64748b;
-      text-transform:uppercase;letter-spacing:1px;
-      margin-bottom:18px;display:flex;align-items:center;gap:6px;
+    .card::before{
+      content:'';position:absolute;inset:0;border-radius:20px;
+      opacity:0;transition:opacity 0.4s;
+      pointer-events:none;
     }
-    .section-label .icon{font-size:15px;}
 
-    /* Mic waveform */
+    /* ===== Mic Card (紫红色系) ===== */
+    .mic-card{
+      background:linear-gradient(145deg,rgba(79,70,229,0.10),rgba(124,58,237,0.06));
+      border:1px solid rgba(124,58,237,0.15);
+    }
+    .mic-card.active{
+      background:linear-gradient(145deg,rgba(239,68,68,0.10),rgba(220,38,38,0.06));
+      border-color:rgba(239,68,68,0.25);
+    }
+    .mic-card.active::before{
+      background:radial-gradient(ellipse at 50% 80%,rgba(239,68,68,0.08) 0%,transparent 70%);
+      opacity:1;
+    }
+
+    /* ===== Speaker Card (青蓝色系) ===== */
+    .spk-card{
+      background:linear-gradient(145deg,rgba(6,182,212,0.10),rgba(8,145,178,0.06));
+      border:1px solid rgba(6,182,212,0.15);
+    }
+    .spk-card.active{
+      background:linear-gradient(145deg,rgba(6,182,212,0.14),rgba(59,130,246,0.08));
+      border-color:rgba(6,182,212,0.30);
+    }
+    .spk-card.active::before{
+      background:radial-gradient(ellipse at 50% 80%,rgba(6,182,212,0.08) 0%,transparent 70%);
+      opacity:1;
+    }
+
+    /* Card title */
+    .card-title{
+      font-size:15px;font-weight:700;
+      display:flex;align-items:center;gap:8px;
+      margin-bottom:18px;letter-spacing:0.3px;
+    }
+    .mic-card .card-title{color:#c4b5fd;}
+    .mic-card.active .card-title{color:#fca5a5;}
+    .spk-card .card-title{color:#67e8f9;}
+    .spk-card.active .card-title{color:#7dd3fc;}
+    .card-title .card-icon{font-size:20px;}
+
+    /* Waveform (shared) */
     .wave{
       display:flex;align-items:center;justify-content:center;
-      gap:3px;height:44px;margin-bottom:16px;
+      gap:3px;height:44px;margin-bottom:20px;
     }
     .wave .bar{
       width:4px;height:8px;border-radius:2px;
-      background:#4f46e5;transition:background 0.3s;
+      transition:background 0.3s;
     }
-    .wave.on .bar{animation:w 0.6s ease-in-out infinite;}
-    @keyframes w{0%,100%{height:8px;background:#4f46e5}50%{height:36px;background:#7c3aed}}
-    .wave.blue .bar{background:#06b6d4;}
-    .wave.blue.on .bar{animation:w2 0.6s ease-in-out infinite;}
-    @keyframes w2{0%,100%{height:8px;background:#06b6d4}50%{height:36px;background:#67e8f9}}
+    /* Mic wave: purple → red when active */
+    .mic-card .wave .bar{background:rgba(124,58,237,0.3);}
+    .mic-card.active .wave .bar{animation:wMic 0.6s ease-in-out infinite;}
+    @keyframes wMic{
+      0%,100%{height:8px;background:#ef4444;}
+      50%{height:36px;background:#f87171;}
+    }
+    /* Speaker wave: cyan */
+    .spk-card .wave .bar{background:rgba(6,182,212,0.3);}
+    .spk-card.active .wave .bar{animation:wSpk 0.6s ease-in-out infinite;}
+    @keyframes wSpk{
+      0%,100%{height:8px;background:#06b6d4;}
+      50%{height:36px;background:#67e8f9;}
+    }
 
-    /* Mic button */
-    .mic-btn{
-      width:130px;height:130px;border-radius:50%;border:none;
-      background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;
-      font-size:48px;cursor:pointer;
-      box-shadow:0 8px 40px rgba(79,70,229,0.35);
+    /* ===== Big Round Button (shared) ===== */
+    .big-btn{
+      width:110px;height:110px;border-radius:50%;border:none;
+      color:#fff;font-size:44px;cursor:pointer;
       transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
       position:relative;overflow:hidden;
       -webkit-user-select:none;user-select:none;
+      display:flex;align-items:center;justify-content:center;
     }
-    .mic-btn::before{
+    .big-btn::before{
       content:'';position:absolute;inset:0;border-radius:50%;
       background:linear-gradient(180deg,rgba(255,255,255,0.12) 0%,transparent 60%);
+      pointer-events:none;
     }
-    .mic-btn:active{transform:scale(0.93);}
+    .big-btn:active{transform:scale(0.92);}
+
+    /* Mic button states */
+    .mic-btn{
+      background:linear-gradient(135deg,#4f46e5,#7c3aed);
+      box-shadow:0 8px 40px rgba(79,70,229,0.35);
+    }
     .mic-btn.rec{
       background:linear-gradient(135deg,#ef4444,#dc2626);
       box-shadow:0 8px 40px rgba(239,68,68,0.45);
@@ -131,48 +189,60 @@
     }
     .mic-btn:disabled{
       background:linear-gradient(135deg,#1e293b,#334155);
-      box-shadow:0 4px 16px rgba(0,0,0,0.3);cursor:not-allowed;
-      opacity:0.6;
+      box-shadow:0 4px 16px rgba(0,0,0,0.3);
+      cursor:not-allowed;opacity:0.5;
     }
     .mic-btn:disabled::before{display:none;}
-    .micLbl{
+    .mic-btn:disabled:active{transform:none;}
+
+    /* Speaker button states */
+    .spk-btn{
+      background:linear-gradient(135deg,#0891b2,#0e7490);
+      box-shadow:0 8px 40px rgba(6,182,212,0.35);
+    }
+    .spk-btn.on{
+      background:linear-gradient(135deg,#06b6d4,#0284c7);
+      box-shadow:0 8px 40px rgba(6,182,212,0.50);
+      animation:spkGlow 2s ease-in-out infinite;
+    }
+    @keyframes spkGlow{
+      0%,100%{box-shadow:0 8px 40px rgba(6,182,212,0.50);}
+      50%{box-shadow:0 8px 60px rgba(6,182,212,0.70);}
+    }
+    .spk-btn:disabled{
+      background:linear-gradient(135deg,#1e293b,#334155);
+      box-shadow:0 4px 16px rgba(0,0,0,0.3);
+      cursor:not-allowed;opacity:0.5;
+    }
+    .spk-btn:disabled::before{display:none;}
+    .spk-btn:disabled:active{transform:none;}
+
+    /* Button label */
+    .btn-label{
       font-size:13px;color:#94a3b8;margin-top:12px;
       font-weight:500;transition:color 0.3s;
     }
 
-    /* ===== Speaker Section ===== */
-    .spk-section{
-      width:100%;max-width:400px;
-      background:rgba(255,255,255,0.04);
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:16px;padding:18px 22px;margin-bottom:14px;
+    /* Card sub-info */
+    .card-info{
+      width:100%;margin-top:18px;
+      display:flex;flex-direction:column;gap:10px;
     }
-    .spk-section .section-label{margin-bottom:14px;}
-
-    .row{display:flex;align-items:center;justify-content:space-between;}
-    .row span{font-size:14px;color:#cbd5e1;}
-    .row .val{font-size:14px;color:#64748b;font-variant-numeric:tabular-nums;}
-
-    /* Toggle */
-    .toggle{
-      width:56px;height:32px;background:#1e293b;border-radius:16px;
-      position:relative;cursor:pointer;transition:all 0.3s;
-      border:2px solid rgba(255,255,255,0.06);
-      -webkit-user-select:none;user-select:none;
+    .info-row{
+      display:flex;align-items:center;justify-content:space-between;
     }
-    .toggle::after{
-      content:'';width:24px;height:24px;background:#64748b;
-      border-radius:50%;position:absolute;top:2px;left:2px;
-      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
-    }
-    .toggle.on{background:#06b6d4;border-color:rgba(6,182,212,0.3);}
-    .toggle.on.blue{background:#06b6d4;border-color:rgba(6,182,212,0.3);}
-    .toggle.on::after{left:26px;background:#fff;}
+    .info-row .label{font-size:13px;color:#94a3b8;display:flex;align-items:center;gap:6px;}
+    .info-row .val{font-size:13px;font-variant-numeric:tabular-nums;}
+    .mic-card .info-row .val{color:#a78bfa;}
+    .mic-card.active .info-row .val{color:#f87171;}
+    .spk-card .info-row .val{color:#22d3ee;}
 
-    /* Volume */
-    .vol{display:flex;align-items:center;gap:10px;margin-top:14px;}
-    .vol .vol-icon{font-size:16px;color:#64748b;}
-    .vol .vol-icon.loud{color:#06b6d4;}
+    /* Volume slider inside speaker card */
+    .vol-row{
+      display:flex;align-items:center;gap:10px;
+    }
+    .vol-row .vol-icon{font-size:16px;color:#64748b;}
+    .vol-row .vol-icon.loud{color:#06b6d4;}
     input[type=range]{
       flex:1;-webkit-appearance:none;appearance:none;
       height:6px;background:#1e293b;border-radius:3px;outline:none;
@@ -188,27 +258,6 @@
       background:linear-gradient(135deg,#06b6d4,#0891b2);
       border-radius:50%;cursor:pointer;border:none;
     }
-
-    /* ===== Stats Section ===== */
-    .stat-section{
-      width:100%;max-width:400px;
-      background:rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.05);
-      border-radius:16px;padding:16px 22px;margin-bottom:14px;
-    }
-    .stat-section .section-label{margin-bottom:12px;}
-    .stat-row{
-      display:flex;align-items:center;justify-content:space-between;
-      padding:6px 0;
-    }
-    .stat-row+.stat-row{border-top:1px solid rgba(255,255,255,0.04);}
-    .stat-row .label{font-size:13px;color:#94a3b8;display:flex;align-items:center;gap:6px;}
-    .stat-row .label .dot-sm{
-      width:6px;height:6px;border-radius:50%;
-    }
-    .stat-row .label .dot-sm.mic{background:#7c3aed;}
-    .stat-row .label .dot-sm.spk{background:#06b6d4;}
-    .stat-row .val{font-size:13px;color:#64748b;font-variant-numeric:tabular-nums;}
 
     /* ===== Error & Debug ===== */
     .err{
@@ -255,12 +304,11 @@
     </div>
   </div>
 
-  <!-- Mic Section -->
-  <div class="mic-section">
-    <div class="section-label">
-      <span class="icon">🎙️</span> 麦克风（收音 → PC）
+  <!-- ===== Mic Card ===== -->
+  <div class="card mic-card" id="micCard">
+    <div class="card-title">
+      <span class="card-icon">🎙️</span> 麦克风 → 收音到 PC
     </div>
-
     <!-- Mic waveform -->
     <div class="wave" id="micWave">
       <div class="bar" style="animation-delay:0s"></div>
@@ -273,41 +321,52 @@
       <div class="bar" style="animation-delay:.24s"></div>
       <div class="bar" style="animation-delay:.16s"></div>
     </div>
-
-    <!-- Mic button -->
-    <button class="mic-btn" id="micBtn" disabled>🎙️</button>
-    <div class="micLbl" id="micLbl">点击开始收音</div>
-  </div>
-
-  <!-- Speaker Section -->
-  <div class="spk-section">
-    <div class="section-label">
-      <span class="icon">🔊</span> 音箱（播放 PC 声音）
-    </div>
-    <div class="row">
-      <span>接收 PC 音频</span>
-      <div class="toggle" id="spkToggle"></div>
-    </div>
-    <div class="vol">
-      <span class="vol-icon">🔈</span>
-      <input type="range" id="spkVol" min="0" max="100" value="80">
-      <span class="vol-icon loud">🔊</span>
+    <!-- Mic big button -->
+    <button class="big-btn mic-btn" id="micBtn" disabled>🎙️</button>
+    <div class="btn-label" id="micLbl">点击开始收音</div>
+    <!-- Mic sub-info -->
+    <div class="card-info">
+      <div class="info-row">
+        <span class="label">📤 已发送</span>
+        <span class="val" id="statMic">0 B</span>
+      </div>
     </div>
   </div>
 
-  <!-- Stats Section -->
-  <div class="stat-section">
-    <div class="section-label">
-      <span class="icon">📊</span> 数据统计
+  <!-- ===== Speaker Card ===== -->
+  <div class="card spk-card" id="spkCard">
+    <div class="card-title">
+      <span class="card-icon">🔊</span> 音箱 ← 播放 PC 声音
     </div>
-    <div class="stat-row">
-      <span class="label"><span class="dot-sm mic"></span> 已发送（麦克风）</span>
-      <span class="val" id="statMic">0 B</span>
+    <!-- Speaker waveform -->
+    <div class="wave" id="spkWave">
+      <div class="bar" style="animation-delay:0s"></div>
+      <div class="bar" style="animation-delay:.08s"></div>
+      <div class="bar" style="animation-delay:.16s"></div>
+      <div class="bar" style="animation-delay:.24s"></div>
+      <div class="bar" style="animation-delay:.32s"></div>
+      <div class="bar" style="animation-delay:.4s"></div>
+      <div class="bar" style="animation-delay:.32s"></div>
+      <div class="bar" style="animation-delay:.24s"></div>
+      <div class="bar" style="animation-delay:.16s"></div>
     </div>
-    <div class="stat-row">
-      <span class="label"><span class="dot-sm spk"></span> 已接收（音箱）</span>
-      <span class="val" id="statSpk">0 B</span>
+    <!-- Speaker big button (hidden toggle reused underneath) -->
+    <button class="big-btn spk-btn" id="spkBtn">🔊</button>
+    <div class="btn-label" id="spkLbl">点击开始播放</div>
+    <!-- Speaker sub-info -->
+    <div class="card-info">
+      <div class="vol-row">
+        <span class="vol-icon">🔈</span>
+        <input type="range" id="spkVol" min="0" max="100" value="80">
+        <span class="vol-icon loud">🔊</span>
+      </div>
+      <div class="info-row">
+        <span class="label">📥 已接收</span>
+        <span class="val" id="statSpk">0 B</span>
+      </div>
     </div>
+    <!-- Hidden toggle for JS compatibility -->
+    <div class="toggle" id="spkToggle" style="display:none"></div>
   </div>
 
   <div class="err" id="err"></div>
@@ -327,6 +386,13 @@
     var spkToggle=document.getElementById('spkToggle'), spkVol=document.getElementById('spkVol');
     var errEl=document.getElementById('err'), dbgEl=document.getElementById('dbg');
     var statMic=document.getElementById('statMic'), statSpk=document.getElementById('statSpk');
+
+    // New UI elements
+    var micCard=document.getElementById('micCard');
+    var spkCard=document.getElementById('spkCard');
+    var spkBtn=document.getElementById('spkBtn');
+    var spkLbl=document.getElementById('spkLbl');
+    var spkWave=document.getElementById('spkWave');
 
     var ws=null, recording=false, spkOn=false;
     var actx=null, playCtx=null, gainNode=null, nextTime=0, stream=null;
@@ -376,7 +442,8 @@
       ws.onclose=function(){
         clearInterval(pingTimer);
         dot.className='dot'; stxt.textContent='重新连接中...';
-        micBtn.disabled=true; stopMic(); stopSpeaker();
+        micBtn.disabled=true; spkBtn.disabled=true;
+        stopMic(); stopSpeaker();
         setTimeout(connect,2000);
       };
       ws.onerror=function(){
@@ -391,7 +458,7 @@
             if(m.type==='connected'){
               dbg('Server OK');
               dot.className='dot ok'; stxt.textContent='已连接'+(relayMode?' (中继)':'');
-              micBtn.disabled=false;
+              micBtn.disabled=false; spkBtn.disabled=false;
               clearInterval(pingTimer);
               pingTimer=setInterval(function(){
                 if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
@@ -401,7 +468,8 @@
               errEl.textContent=m.message;errEl.style.display='block';
             }else if(m.type==='peer-disconnected'){
               dot.className='dot'; stxt.textContent='对方已断开';
-              micBtn.disabled=true; stopMic(); stopSpeaker();
+              micBtn.disabled=true; spkBtn.disabled=true;
+              stopMic(); stopSpeaker();
             }
           }catch(e){}
         }else{
@@ -439,8 +507,9 @@
           statMic.textContent=fmt(micBytes);
         };
         recording=true;
-        micBtn.className='mic-btn rec';micBtn.innerHTML='⏹';
+        micBtn.className='big-btn mic-btn rec';micBtn.innerHTML='⏹';
         micLbl.textContent='录音中... 点击停止';
+        micCard.classList.add('active');
         dot.className='dot rec'; micWave.className='wave on';
         dbg('');
       }).catch(function(err){
@@ -452,8 +521,9 @@
       recording=false;
       if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
       if(actx&&actx.state!=='closed'){actx.close();actx=null;}
-      micBtn.className='mic-btn';micBtn.innerHTML='🎙️';
+      micBtn.className='big-btn mic-btn';micBtn.innerHTML='🎙️';
       micLbl.textContent='点击开始收音';
+      micCard.classList.remove('active');
       dot.className=ws&&ws.readyState===1?'dot ok':'dot';
       micWave.className='wave';
     }
@@ -461,7 +531,13 @@
     // ===== Speaker (PC -> Phone) =====
     function startSpeaker(){
       spkOn=true;
+      // Sync the hidden toggle for compatibility
       spkToggle.className='toggle on blue';
+      spkBtn.className='big-btn spk-btn on';
+      spkBtn.innerHTML='🔇';
+      spkLbl.textContent='播放中... 点击停止';
+      spkCard.classList.add('active');
+      spkWave.className='wave on';
       if(!playCtx){
         playCtx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:48000});
         gainNode=playCtx.createGain();
@@ -479,6 +555,11 @@
     function stopSpeaker(){
       spkOn=false;
       spkToggle.className='toggle';
+      spkBtn.className='big-btn spk-btn';
+      spkBtn.innerHTML='🔊';
+      spkLbl.textContent='点击开始播放';
+      spkCard.classList.remove('active');
+      spkWave.className='wave';
       nextTime=0;
       if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'stop-pc-audio'}));
     }
@@ -503,6 +584,8 @@
 
     // ===== Events =====
     micBtn.onclick=function(){recording?stopMic():startMic();};
+    spkBtn.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
+    // Keep spkToggle click for compatibility (though hidden)
     spkToggle.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
     spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};
 
