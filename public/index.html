@@ -1,142 +1,324 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Voice Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SoundBridge - 手机变无线麦克风 &amp; 无线音箱</title>
+  <meta name="theme-color" content="#0a0a1a">
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body {
-      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-      background:#0f0f1a; color:#fff; min-height:100vh;
-      display:flex; flex-direction:column; align-items:center; padding:20px;
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html,body{height:100%;overflow-x:hidden;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue','Segoe UI',Roboto,sans-serif;
+      background:#0a0a1a;color:#e2e8f0;
+      display:flex;flex-direction:column;align-items:center;
+      padding:0 20px 40px;min-height:100vh;
+      -webkit-tap-highlight-color:transparent;
+      -webkit-font-smoothing:antialiased;
     }
-    .header { text-align:center; margin:30px 0 20px; }
-    .header h1 { font-size:24px; font-weight:700; }
-    .header p { font-size:13px; color:#888; margin-top:6px; }
-    .status-bar {
-      display:flex; align-items:center; gap:8px;
-      padding:10px 18px; background:rgba(255,255,255,0.05);
-      border-radius:12px; margin-bottom:24px; width:100%; max-width:360px;
-    }
-    .dot {
-      width:10px; height:10px; border-radius:50%;
-      background:#555; flex-shrink:0; transition:background 0.3s;
-    }
-    .dot.ok { background:#4ade80; box-shadow:0 0 8px #4ade8066; }
-    .dot.rec { background:#f87171; animation:pulse 1s infinite; }
-    .dot.blue { background:#60a5fa; animation:pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .stxt { font-size:13px; }
 
-    /* Waveform */
-    .wave { display:flex; align-items:center; justify-content:center; gap:3px; height:50px; margin-bottom:20px; }
-    .wave .bar { width:4px; height:8px; background:#6366f1; border-radius:2px; }
-    .wave.on .bar { animation:w 0.6s ease-in-out infinite; }
-    @keyframes w { 0%,100%{height:8px;background:#6366f1} 50%{height:36px;background:#818cf8} }
-    .wave.blue .bar { background:#60a5fa; }
-    .wave.blue.on .bar { animation:w2 0.6s ease-in-out infinite; }
-    @keyframes w2 { 0%,100%{height:8px;background:#60a5fa} 50%{height:36px;background:#93c5fd} }
+    /* ===== Brand Header ===== */
+    .brand{width:100%;max-width:400px;text-align:center;padding:40px 0 24px;}
+    .logo{
+      display:inline-flex;align-items:center;justify-content:center;
+      width:64px;height:64px;border-radius:18px;
+      background:linear-gradient(135deg,#4f46e5,#7c3aed);
+      box-shadow:0 8px 32px rgba(79,70,229,0.35);
+      margin-bottom:14px;position:relative;overflow:hidden;
+    }
+    .logo::before{
+      content:'';position:absolute;inset:0;
+      background:linear-gradient(180deg,rgba(255,255,255,0.15) 0%,transparent 60%);
+    }
+    .logo-inner{
+      display:flex;align-items:flex-end;justify-content:center;gap:2px;
+      height:30px;position:relative;z-index:1;
+    }
+    .logo-inner i{
+      display:block;width:3px;border-radius:2px;background:rgba(255,255,255,0.9);
+      animation:logoWave 1.2s ease-in-out infinite;
+    }
+    .logo-inner i:nth-child(1){height:8px;animation-delay:0s;}
+    .logo-inner i:nth-child(2){height:16px;animation-delay:0.1s;}
+    .logo-inner i:nth-child(3){height:24px;animation-delay:0.2s;}
+    .logo-inner i:nth-child(4){height:30px;animation-delay:0.3s;}
+    .logo-inner i:nth-child(5){height:20px;animation-delay:0.4s;}
+    .logo-inner i:nth-child(6){height:12px;animation-delay:0.5s;}
+    .logo-inner i:nth-child(7){height:22px;animation-delay:0.6s;}
+    @keyframes logoWave{
+      0%,100%{transform:scaleY(0.4);}
+      50%{transform:scaleY(1);}
+    }
+    .brand h1{
+      font-size:28px;font-weight:800;letter-spacing:-0.5px;
+      background:linear-gradient(135deg,#a5b4fc,#c4b5fd,#67e8f9);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .brand .slogan{font-size:13px;color:#64748b;margin-top:4px;letter-spacing:0.5px;}
 
-    /* Buttons */
-    .mic-btn {
-      width:120px; height:120px; border-radius:50%; border:none;
-      background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff;
-      font-size:42px; cursor:pointer; margin-bottom:6px;
-      box-shadow:0 8px 30px rgba(99,102,241,0.3); transition:all 0.3s;
+    /* ===== Connection Status Card ===== */
+    .conn-card{
+      width:100%;max-width:400px;
+      background:linear-gradient(135deg,rgba(79,70,229,0.12),rgba(124,58,237,0.08));
+      border:1px solid rgba(79,70,229,0.2);border-radius:16px;
+      padding:14px 20px;margin-bottom:20px;
+      display:flex;align-items:center;gap:12px;
     }
-    .mic-btn:active { transform:scale(0.95); }
-    .mic-btn.rec { background:linear-gradient(135deg,#ef4444,#dc2626); box-shadow:0 8px 30px rgba(239,68,68,0.4); }
-    .mic-btn:disabled { background:#333; box-shadow:none; cursor:not-allowed; }
-    .lbl { font-size:13px; color:#888; margin-bottom:24px; }
+    .dot{
+      width:12px;height:12px;border-radius:50%;
+      background:#475569;flex-shrink:0;transition:all 0.4s;
+    }
+    .dot.ok{background:#4ade80;box-shadow:0 0 12px rgba(74,222,128,0.5);}
+    .dot.rec{background:#f87171;box-shadow:0 0 12px rgba(248,113,113,0.5);animation:pulse 1s infinite;}
+    .dot.blue{background:#60a5fa;box-shadow:0 0 12px rgba(96,165,250,0.5);animation:pulse 1.5s infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+    .conn-info{display:flex;flex-direction:column;gap:2px;flex:1;}
+    .stxt{font-size:14px;font-weight:600;color:#e2e8f0;}
+    .conn-sub{font-size:11px;color:#64748b;}
 
-    /* Sections */
-    .section {
-      width:100%; max-width:360px;
-      background:rgba(255,255,255,0.05); border-radius:16px;
-      padding:16px 20px; margin-bottom:12px;
+    /* ===== Mic Section ===== */
+    .mic-section{
+      width:100%;max-width:400px;
+      display:flex;flex-direction:column;align-items:center;
+      padding:24px 0 28px;
     }
-    .section h3 { font-size:13px; color:#888; margin-bottom:10px; }
-    .row { display:flex; align-items:center; justify-content:space-between; }
-    .row span { font-size:13px; }
-    .toggle {
-      width:46px; height:26px; background:#333; border-radius:13px;
-      position:relative; cursor:pointer; transition:background 0.3s;
+    .section-label{
+      font-size:13px;font-weight:600;color:#64748b;
+      text-transform:uppercase;letter-spacing:1px;
+      margin-bottom:18px;display:flex;align-items:center;gap:6px;
     }
-    .toggle.on { background:#6366f1; }
-    .toggle.on.blue { background:#3b82f6; }
-    .toggle::after {
-      content:''; width:20px; height:20px; background:#fff;
-      border-radius:50%; position:absolute; top:3px; left:3px; transition:left 0.3s;
+    .section-label .icon{font-size:15px;}
+
+    /* Mic waveform */
+    .wave{
+      display:flex;align-items:center;justify-content:center;
+      gap:3px;height:44px;margin-bottom:16px;
     }
-    .toggle.on::after { left:23px; }
-    .vol { display:flex; align-items:center; gap:8px; margin-top:10px; }
-    .vol span { font-size:16px; }
-    input[type=range] {
-      flex:1; -webkit-appearance:none; height:4px;
-      background:#333; border-radius:2px; outline:none;
+    .wave .bar{
+      width:4px;height:8px;border-radius:2px;
+      background:#4f46e5;transition:background 0.3s;
     }
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance:none; width:16px; height:16px;
-      background:#6366f1; border-radius:50%; cursor:pointer;
+    .wave.on .bar{animation:w 0.6s ease-in-out infinite;}
+    @keyframes w{0%,100%{height:8px;background:#4f46e5}50%{height:36px;background:#7c3aed}}
+    .wave.blue .bar{background:#06b6d4;}
+    .wave.blue.on .bar{animation:w2 0.6s ease-in-out infinite;}
+    @keyframes w2{0%,100%{height:8px;background:#06b6d4}50%{height:36px;background:#67e8f9}}
+
+    /* Mic button */
+    .mic-btn{
+      width:130px;height:130px;border-radius:50%;border:none;
+      background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;
+      font-size:48px;cursor:pointer;
+      box-shadow:0 8px 40px rgba(79,70,229,0.35);
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
+      position:relative;overflow:hidden;
+      -webkit-user-select:none;user-select:none;
     }
-    .err { color:#f87171; font-size:12px; text-align:center; margin-top:16px; display:none; }
-    .dbg { color:#555; font-size:11px; margin-top:12px; text-align:center; min-height:16px; }
+    .mic-btn::before{
+      content:'';position:absolute;inset:0;border-radius:50%;
+      background:linear-gradient(180deg,rgba(255,255,255,0.12) 0%,transparent 60%);
+    }
+    .mic-btn:active{transform:scale(0.93);}
+    .mic-btn.rec{
+      background:linear-gradient(135deg,#ef4444,#dc2626);
+      box-shadow:0 8px 40px rgba(239,68,68,0.45);
+      animation:recGlow 2s ease-in-out infinite;
+    }
+    @keyframes recGlow{
+      0%,100%{box-shadow:0 8px 40px rgba(239,68,68,0.45);}
+      50%{box-shadow:0 8px 60px rgba(239,68,68,0.65);}
+    }
+    .mic-btn:disabled{
+      background:linear-gradient(135deg,#1e293b,#334155);
+      box-shadow:0 4px 16px rgba(0,0,0,0.3);cursor:not-allowed;
+      opacity:0.6;
+    }
+    .mic-btn:disabled::before{display:none;}
+    .micLbl{
+      font-size:13px;color:#94a3b8;margin-top:12px;
+      font-weight:500;transition:color 0.3s;
+    }
+
+    /* ===== Speaker Section ===== */
+    .spk-section{
+      width:100%;max-width:400px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:16px;padding:18px 22px;margin-bottom:14px;
+    }
+    .spk-section .section-label{margin-bottom:14px;}
+
+    .row{display:flex;align-items:center;justify-content:space-between;}
+    .row span{font-size:14px;color:#cbd5e1;}
+    .row .val{font-size:14px;color:#64748b;font-variant-numeric:tabular-nums;}
+
+    /* Toggle */
+    .toggle{
+      width:56px;height:32px;background:#1e293b;border-radius:16px;
+      position:relative;cursor:pointer;transition:all 0.3s;
+      border:2px solid rgba(255,255,255,0.06);
+      -webkit-user-select:none;user-select:none;
+    }
+    .toggle::after{
+      content:'';width:24px;height:24px;background:#64748b;
+      border-radius:50%;position:absolute;top:2px;left:2px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    .toggle.on{background:#06b6d4;border-color:rgba(6,182,212,0.3);}
+    .toggle.on.blue{background:#06b6d4;border-color:rgba(6,182,212,0.3);}
+    .toggle.on::after{left:26px;background:#fff;}
+
+    /* Volume */
+    .vol{display:flex;align-items:center;gap:10px;margin-top:14px;}
+    .vol .vol-icon{font-size:16px;color:#64748b;}
+    .vol .vol-icon.loud{color:#06b6d4;}
+    input[type=range]{
+      flex:1;-webkit-appearance:none;appearance:none;
+      height:6px;background:#1e293b;border-radius:3px;outline:none;
+    }
+    input[type=range]::-webkit-slider-thumb{
+      -webkit-appearance:none;width:24px;height:24px;
+      background:linear-gradient(135deg,#06b6d4,#0891b2);
+      border-radius:50%;cursor:pointer;
+      box-shadow:0 2px 8px rgba(6,182,212,0.4);
+    }
+    input[type=range]::-moz-range-thumb{
+      width:24px;height:24px;
+      background:linear-gradient(135deg,#06b6d4,#0891b2);
+      border-radius:50%;cursor:pointer;border:none;
+    }
+
+    /* ===== Stats Section ===== */
+    .stat-section{
+      width:100%;max-width:400px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+      border-radius:16px;padding:16px 22px;margin-bottom:14px;
+    }
+    .stat-section .section-label{margin-bottom:12px;}
+    .stat-row{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:6px 0;
+    }
+    .stat-row+.stat-row{border-top:1px solid rgba(255,255,255,0.04);}
+    .stat-row .label{font-size:13px;color:#94a3b8;display:flex;align-items:center;gap:6px;}
+    .stat-row .label .dot-sm{
+      width:6px;height:6px;border-radius:50%;
+    }
+    .stat-row .label .dot-sm.mic{background:#7c3aed;}
+    .stat-row .label .dot-sm.spk{background:#06b6d4;}
+    .stat-row .val{font-size:13px;color:#64748b;font-variant-numeric:tabular-nums;}
+
+    /* ===== Error & Debug ===== */
+    .err{
+      color:#f87171;font-size:13px;text-align:center;
+      margin-top:16px;padding:10px 16px;
+      background:rgba(248,113,113,0.1);border-radius:10px;
+      display:none;width:100%;max-width:400px;
+    }
+    .dbg{color:#475569;font-size:11px;margin-top:10px;text-align:center;min-height:16px;}
+
+    /* ===== Footer ===== */
+    .footer{
+      margin-top:auto;padding-top:24px;
+      font-size:11px;color:#334155;text-align:center;
+    }
+    .footer .ver{color:#475569;}
+
+    /* ===== Safe Area (notch devices) ===== */
+    @supports(padding:env(safe-area-inset-top)){
+      body{padding-top:env(safe-area-inset-top);}
+      .brand{padding-top:max(40px,env(safe-area-inset-top));}
+    }
   </style>
 </head>
 <body>
 
-  <div class="header">
-    <h1>Voice Assistant</h1>
-    <p>Phone as PC Mic &amp; Speaker</p>
+  <!-- Brand Header -->
+  <div class="brand">
+    <div class="logo">
+      <div class="logo-inner">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+    </div>
+    <h1>SoundBridge</h1>
+    <div class="slogan">手机变无线麦克风 &amp; 无线音箱</div>
   </div>
 
-  <div class="status-bar">
+  <!-- Connection Status Card -->
+  <div class="conn-card">
     <div class="dot" id="dot"></div>
-    <span class="stxt" id="stxt">Connecting...</span>
+    <div class="conn-info">
+      <span class="stxt" id="stxt">连接中...</span>
+      <span class="conn-sub">📊 等待服务器响应</span>
+    </div>
   </div>
 
-  <!-- Mic waveform -->
-  <div class="wave" id="micWave">
-    <div class="bar" style="animation-delay:0s"></div>
-    <div class="bar" style="animation-delay:.1s"></div>
-    <div class="bar" style="animation-delay:.2s"></div>
-    <div class="bar" style="animation-delay:.3s"></div>
-    <div class="bar" style="animation-delay:.4s"></div>
-    <div class="bar" style="animation-delay:.5s"></div>
-    <div class="bar" style="animation-delay:.3s"></div>
-    <div class="bar" style="animation-delay:.2s"></div>
-    <div class="bar" style="animation-delay:.1s"></div>
+  <!-- Mic Section -->
+  <div class="mic-section">
+    <div class="section-label">
+      <span class="icon">🎙️</span> 麦克风（收音 → PC）
+    </div>
+
+    <!-- Mic waveform -->
+    <div class="wave" id="micWave">
+      <div class="bar" style="animation-delay:0s"></div>
+      <div class="bar" style="animation-delay:.08s"></div>
+      <div class="bar" style="animation-delay:.16s"></div>
+      <div class="bar" style="animation-delay:.24s"></div>
+      <div class="bar" style="animation-delay:.32s"></div>
+      <div class="bar" style="animation-delay:.4s"></div>
+      <div class="bar" style="animation-delay:.32s"></div>
+      <div class="bar" style="animation-delay:.24s"></div>
+      <div class="bar" style="animation-delay:.16s"></div>
+    </div>
+
+    <!-- Mic button -->
+    <button class="mic-btn" id="micBtn" disabled>🎙️</button>
+    <div class="micLbl" id="micLbl">点击开始收音</div>
   </div>
 
-  <!-- Mic button -->
-  <button class="mic-btn" id="micBtn" disabled>&#127908;</button>
-  <div class="lbl" id="micLbl">Tap to start mic</div>
-
-  <!-- Speaker: receive PC audio -->
-  <div class="section">
-    <h3>&#128266; Speaker - Hear PC Audio</h3>
+  <!-- Speaker Section -->
+  <div class="spk-section">
+    <div class="section-label">
+      <span class="icon">🔊</span> 音箱（播放 PC 声音）
+    </div>
     <div class="row">
-      <span>Receive PC audio</span>
+      <span>接收 PC 音频</span>
       <div class="toggle" id="spkToggle"></div>
     </div>
     <div class="vol">
-      <span>&#128266;</span>
+      <span class="vol-icon">🔈</span>
       <input type="range" id="spkVol" min="0" max="100" value="80">
-      <span>&#128266;</span>
+      <span class="vol-icon loud">🔊</span>
     </div>
   </div>
 
-  <!-- Stats -->
-  <div class="section">
-    <h3>Stats</h3>
-    <div class="row"><span>Mic data sent</span><span id="statMic">0 KB</span></div>
-    <div class="row" style="margin-top:6px"><span>Speaker data received</span><span id="statSpk">0 KB</span></div>
+  <!-- Stats Section -->
+  <div class="stat-section">
+    <div class="section-label">
+      <span class="icon">📊</span> 数据统计
+    </div>
+    <div class="stat-row">
+      <span class="label"><span class="dot-sm mic"></span> 已发送（麦克风）</span>
+      <span class="val" id="statMic">0 B</span>
+    </div>
+    <div class="stat-row">
+      <span class="label"><span class="dot-sm spk"></span> 已接收（音箱）</span>
+      <span class="val" id="statSpk">0 B</span>
+    </div>
   </div>
 
   <div class="err" id="err"></div>
   <div class="dbg" id="dbg"></div>
-  <div style="color:#444;font-size:10px;margin-top:8px;text-align:center" id="log"></div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span class="ver">SoundBridge v1.0</span> · slwen.cn
+  </div>
+
+  <div style="display:none" id="log"></div>
 
   <script>
     var dot=document.getElementById('dot'), stxt=document.getElementById('stxt');
@@ -166,26 +348,23 @@
 
     // ===== Connect =====
     function connect(){
-      dot.className='dot'; stxt.textContent='Connecting...';
+      dot.className='dot'; stxt.textContent='连接中...';
 
       var url;
       if(relayMode){
-        // Relay: connect to wss://slwen.cn/voice/ws?role=phone&session=XXXXXX
         url='wss://'+location.host+'/voice/ws?role=phone&session='+sessionId;
         dbg('Relay mode, session: '+sessionId);
       }else{
-        // LAN: connect directly
         var proto=(location.protocol==='https:')?'wss:':'ws:';
         url=proto+'//'+location.host;
       }
 
       try{ws=new WebSocket(url);}catch(e){
-        stxt.textContent='Error';
+        stxt.textContent='连接出错';
         setTimeout(connect,3000); return;
       }
       ws.binaryType='arraybuffer';
 
-      // 5s connect timeout
       var t=setTimeout(function(){
         if(ws&&ws.readyState!==1){ try{ws.close();}catch(e){} }
       },5000);
@@ -196,13 +375,13 @@
       };
       ws.onclose=function(){
         clearInterval(pingTimer);
-        dot.className='dot'; stxt.textContent='Reconnecting...';
+        dot.className='dot'; stxt.textContent='重新连接中...';
         micBtn.disabled=true; stopMic(); stopSpeaker();
         setTimeout(connect,2000);
       };
       ws.onerror=function(){
         clearInterval(pingTimer);
-        dot.className='dot'; stxt.textContent='Connecting...';
+        dot.className='dot'; stxt.textContent='连接中...';
         setTimeout(connect,3000);
       };
       ws.onmessage=function(ev){
@@ -211,22 +390,21 @@
             var m=JSON.parse(ev.data);
             if(m.type==='connected'){
               dbg('Server OK');
-              dot.className='dot ok'; stxt.textContent='Connected'+(relayMode?' (Relay)':'');
+              dot.className='dot ok'; stxt.textContent='已连接'+(relayMode?' (中继)':'');
               micBtn.disabled=false;
               clearInterval(pingTimer);
               pingTimer=setInterval(function(){
                 if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
               },5000);
             }else if(m.type==='error'){
-              stxt.textContent='Error: '+m.message;
+              stxt.textContent='错误: '+m.message;
               errEl.textContent=m.message;errEl.style.display='block';
             }else if(m.type==='peer-disconnected'){
-              dot.className='dot'; stxt.textContent='PC disconnected';
+              dot.className='dot'; stxt.textContent='对方已断开';
               micBtn.disabled=true; stopMic(); stopSpeaker();
             }
           }catch(e){}
         }else{
-          // Binary = PC audio
           spkBytes+=ev.data.byteLength;
           statSpk.textContent=fmt(spkBytes);
           if(spkBytes<3000) log('PC audio: '+ev.data.byteLength+' bytes');
@@ -238,9 +416,9 @@
     // ===== Mic (Phone -> PC) =====
     function startMic(){
       if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-        errEl.textContent='Mic not supported';errEl.style.display='block';return;
+        errEl.textContent='麦克风不可用';errEl.style.display='block';return;
       }
-      dbg('Requesting mic...');
+      dbg('请求麦克风权限...');
       navigator.mediaDevices.getUserMedia({
         audio:{sampleRate:48000,channelCount:1,echoCancellation:true,noiseSuppression:true}
       }).then(function(s){
@@ -261,12 +439,12 @@
           statMic.textContent=fmt(micBytes);
         };
         recording=true;
-        micBtn.className='mic-btn rec';micBtn.innerHTML='&#9209;';
-        micLbl.textContent='Recording... tap to stop';
+        micBtn.className='mic-btn rec';micBtn.innerHTML='⏹';
+        micLbl.textContent='录音中... 点击停止';
         dot.className='dot rec'; micWave.className='wave on';
         dbg('');
       }).catch(function(err){
-        errEl.textContent='Mic: '+err.message;errEl.style.display='block';
+        errEl.textContent='麦克风: '+err.message;errEl.style.display='block';
       });
     }
 
@@ -274,8 +452,8 @@
       recording=false;
       if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
       if(actx&&actx.state!=='closed'){actx.close();actx=null;}
-      micBtn.className='mic-btn';micBtn.innerHTML='&#127908;';
-      micLbl.textContent='Tap to start mic';
+      micBtn.className='mic-btn';micBtn.innerHTML='🎙️';
+      micLbl.textContent='点击开始收音';
       dot.className=ws&&ws.readyState===1?'dot ok':'dot';
       micWave.className='wave';
     }
@@ -290,13 +468,11 @@
         gainNode.connect(playCtx.destination);
         gainNode.gain.value=spkVol.value/100;
         log('AudioContext created, state='+playCtx.state);
-        // Resume if suspended (mobile browser policy)
         if(playCtx.state==='suspended') playCtx.resume();
       }
       _chunkCount=0;
-      // Tell server to start sending PC audio
       if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'start-pc-audio'}));
-      dbg('Receiving PC audio...');
+      dbg('正在接收 PC 音频...');
       setTimeout(function(){dbgEl.textContent='';},2000);
     }
 
@@ -331,7 +507,6 @@
     spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};
 
     // ===== Start =====
-    // Wait for page fully loaded before connecting
     if(document.readyState === 'complete') {
       connect();
     } else {
