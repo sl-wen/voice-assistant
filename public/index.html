@@ -370,7 +370,7 @@
   </div>
 
   <div class="err" id="err"></div>
-  <div class="dbg" id="dbg"></div>
+  <div class="dbg" id="dbg" style="min-height:20px;padding:8px;color:#94a3b8;font-size:12px;">初始化中...</div>
 
   <!-- Footer -->
   <div class="footer">
@@ -583,8 +583,16 @@
     }
 
     // ===== Events =====
-    micBtn.onclick=function(){recording?stopMic():startMic();};
-    spkBtn.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
+    micBtn.onclick=function(){
+      dbg('Mic clicked, recording='+recording+', disabled='+micBtn.disabled);
+      if(micBtn.disabled)return;
+      recording?stopMic():startMic();
+    };
+    spkBtn.onclick=function(){
+      dbg('Spk clicked, spkOn='+spkOn+', disabled='+spkBtn.disabled);
+      if(spkBtn.disabled)return;
+      spkOn?stopSpeaker():startSpeaker();
+    };
     // Keep spkToggle click for compatibility (though hidden)
     spkToggle.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
     spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};

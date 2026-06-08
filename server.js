@@ -203,7 +203,7 @@ function launchCapture(exePath) {
 
   captureProcess.stdout.on('data', (chunk) => {
     if (!captureActive) return;
-    console.log('[CAPTURE] stdout: ' + chunk.length + ' bytes');
+    if (process.env.DEBUG) console.log('[CAPTURE] stdout: ' + chunk.length + ' bytes');
     sendToPhone(chunk);
   });
 

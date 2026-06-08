@@ -225,7 +225,7 @@ class SoundBridge : Form
         openBtn.Click += (s, e) =>
         {
             if (phoneUrl.Length > 0)
-                Process.Start(new ProcessStartInfo(phoneUrl) { UseShellExecute = true });
+                Process.Start(phoneUrl);
         };
         urlPanel.Controls.Add(openBtn);
 
@@ -383,40 +383,8 @@ class SoundBridge : Form
     {
         try
         {
-            string tmpDir = Path.Combine(Path.GetTempPath(), "SoundBridge");
-            Directory.CreateDirectory(tmpDir);
-            string tmpPng = Path.Combine(tmpDir, "qr.png");
-            string qrScript = Path.Combine(runDir, "qr-gen.js");
-
-            string nodeExe = FindNode();
-            if (nodeExe == null || !File.Exists(qrScript))
-            {
-                Log("QR: 需要 Node.js 和 qr-gen.js");
-                return;
-            }
-
-            var psi = new ProcessStartInfo
-            {
-                FileName = nodeExe,
-                Arguments = "\"" + qrScript + "\" \"" + text + "\" \"" + tmpPng + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                WorkingDirectory = runDir
-            };
-
-            var p = Process.Start(psi);
-            p.WaitForExit(5000);
-
-            if (File.Exists(tmpPng))
-            {
-                // Load and lock the image, then release file
-                using (var fs = new FileStream(tmpPng, FileMode.Open, FileAccess.Read))
-                {
-                    qrBox.Image = Image.FromStream(fs);
-                }
-            }
+            Bitmap bmp = QrCode.Generate(text, 120);
+            qrBox.Image = bmp;
         }
         catch (Exception ex)
         {
@@ -459,4 +427,5 @@ class SoundBridge : Form
     }
 }
 
-
+/// <summary>
+/// Minimal QR Code encoder (supports alphanumeric + byte mode, auto version selection)
