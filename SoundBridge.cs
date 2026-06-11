@@ -242,7 +242,7 @@ class SoundBridge : Form
         Controls.Add(logBox);
 
         var footer = new Label();
-        footer.Text = "SoundBridge v1.0 · slwen.cn · 关闭窗口最小化到托盘";
+        footer.Text = "SoundBridge v1.1 · slwen.cn · 关闭窗口最小化到托盘";
         footer.Font = new Font("Microsoft YaHei", 8);
         footer.ForeColor = Color.FromArgb(100, 100, 120);
         footer.AutoSize = true;
