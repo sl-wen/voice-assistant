@@ -594,10 +594,12 @@
 
         ws.onopen=function(){
           clearTimeout(t);
+          connSub.textContent='⏳ WebSocket 已连接，等待确认...';
           log('ws open '+(relayMode?'(relay)':'(lan)'));
         };
         ws.onclose=function(){
           clearInterval(pingTimer);
+          connSub.textContent='❌ 连接已断开';
           // Remember current state before disconnecting
           wasRecording = recording;
           wasPlaying = spkOn;
@@ -626,20 +628,21 @@
 
                 dot.className='dot ok';
                 stxt.textContent='已连接'+(relayMode?' (中继)':'');
-                if (reconnectCount > 1) {
-                  connSub.textContent='🔄 已重连 (第 '+(reconnectCount-1)+' 次)';
-                } else {
-                  connSub.textContent='✅ 服务器已响应';
-                }
+                connSub.textContent='🔄 正在协商编码器...';
                 micBtn.disabled=false; spkBtn.disabled=false;
                 clearInterval(pingTimer);
                 pingTimer=setInterval(function(){
                   if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
                 },5000);
 
-                // Negotiate codec
+                // Negotiate codec (with error protection)
                 negotiateCodec(m.opus, function() {
-                  // After codec negotiation, restore previous state
+                  restoreState();
+                }).catch(function(e) {
+                  console.error('[CODEC] negotiateCodec failed:', e);
+                  connSub.textContent = '🎵 PCM 48kHz — 编码器初始化失败';
+                  useOpus = false;
+                  showCodecBadge();
                   restoreState();
                 });
 
@@ -740,8 +743,11 @@
           return;
         }
 
-        var encOk = await initOpusEncoder();
-        var decOk = await initOpusDecoder();
+        connSub.textContent = '🔄 检查 Opus 编码器...';
+        var encOk = false, decOk = false;
+        try { encOk = await initOpusEncoder(); } catch(e) { console.error('[OPUS] encoder crash:', e); }
+        connSub.textContent = '🔄 检查 Opus 解码器...';
+        try { decOk = await initOpusDecoder(); } catch(e) { console.error('[OPUS] decoder crash:', e); }
 
         if (encOk && decOk) {
           ws.send(JSON.stringify({ type: 'audio-config', codec: 'opus', sampleRate: 48000 }));

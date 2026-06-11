@@ -177,7 +177,7 @@ wss.on('connection', (ws, req) => {
     s.lastDisconnect = null; // Clear disconnect timer
     const hasOpus = true; // PC always supports opus (opusscript on Node.js)
     ws.send(JSON.stringify({ type: 'connected', sessionId: sidUpper, opus: hasOpus }));
-    console.log(`[PHONE] ${s.pc ? 'Reconnected' : 'Joined'} session ${sidUpper}`);
+    console.log(`[PHONE] ${s.pc ? 'Reconnected' : 'Joined'} session ${sidUpper}, PC alive=${!!(s.pc && s.pc.readyState === WebSocket.OPEN)}`);
 
     // Notify PC
     if (s.pc && s.pc.readyState === WebSocket.OPEN) {
@@ -192,8 +192,8 @@ wss.on('connection', (ws, req) => {
       }
     });
 
-    ws.on('close', () => {
-      console.log(`[PHONE] Disconnected from session ${sidUpper}`);
+    ws.on('close', (code, reason) => {
+      console.log(`[PHONE] Disconnected from session ${sidUpper}, code=${code}, reason=${reason || 'none'}`);
       const sess = sessions.get(sidUpper);
       if (sess) {
         sess.phone = null;
