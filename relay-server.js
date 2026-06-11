@@ -19,7 +19,7 @@ const crypto = require('crypto');
 const path = require('path');
 
 const PORT = process.env.PORT || 3212;
-const SESSION_TTL = 60 * 1000;       // session 存活 60 分钟
+const SESSION_TTL = 4 * 60 * 60 * 1000; // session 存活 4 小时
 const RECONNECT_GRACE = 60 * 1000;   // 断开后保留 60s 等待重连
 const HEARTBEAT_INTERVAL = 30 * 1000; // 30s 心跳
 
@@ -35,12 +35,13 @@ function sessionAge(s) {
 }
 
 function sessionIsDead(s) {
-  // 双方都断开，且超过 grace period
-  const pcDead = !s.pc || s.pc.readyState !== WebSocket.OPEN;
-  const phoneDead = !s.phone || s.phone.readyState !== WebSocket.OPEN;
-  const graceExpired = s.lastDisconnect && (Date.now() - s.lastDisconnect > RECONNECT_GRACE);
-
-  if (pcDead && phoneDead && graceExpired) return true;
+  // PC 还活着 → session 有效（不管 age）
+  if (s.pc && s.pc.readyState === WebSocket.OPEN) return false;
+  // Phone 还活着 → session 有效（等 PC 重连）
+  if (s.phone && s.phone.readyState === WebSocket.OPEN) return false;
+  // 双方都断了，检查 grace period
+  if (s.lastDisconnect && (Date.now() - s.lastDisconnect > RECONNECT_GRACE)) return true;
+  // 硬上限 TTL
   if (sessionAge(s) > SESSION_TTL) return true;
   return false;
 }
