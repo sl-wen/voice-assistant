@@ -354,7 +354,7 @@
       <div class="bar" style="animation-delay:.24s"></div>
       <div class="bar" style="animation-delay:.16s"></div>
     </div>
-    <button class="big-btn spk-btn" id="spkBtn">🔊</button>
+    <button class="big-btn spk-btn" id="spkBtn" disabled>🔊</button>
     <div class="btn-label" id="spkLbl">点击开始播放</div>
     <div class="card-info">
       <div class="vol-row">
@@ -566,6 +566,7 @@
         cleanupCodecs();
 
         dot.className='dot';
+        micBtn.disabled=true; spkBtn.disabled=true;
         if (reconnectAttempt === 0) {
           stxt.textContent='连接中...';
           connSub.textContent='📊 等待服务器响应';
@@ -902,14 +903,20 @@
       }
 
       // ===== Events =====
-      micBtn.onclick=function(){
+      function handleMicBtn(e){
+        e.preventDefault();
         if(micBtn.disabled)return;
         recording?stopMic():startMic();
-      };
-      spkBtn.onclick=function(){
+      }
+      function handleSpkBtn(e){
+        e.preventDefault();
         if(spkBtn.disabled)return;
         spkOn?stopSpeaker():startSpeaker();
-      };
+      }
+      micBtn.addEventListener('click', handleMicBtn);
+      micBtn.addEventListener('touchend', handleMicBtn);
+      spkBtn.addEventListener('click', handleSpkBtn);
+      spkBtn.addEventListener('touchend', handleSpkBtn);
       spkToggle.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
       spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};
 
