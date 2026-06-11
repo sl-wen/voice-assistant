@@ -1,12 +1,13 @@
 /**
- * SoundBridge Server v0.8 — Opus Edition
+ * SoundBridge Server v1.1 — Auto-Reconnect Edition
  * Phone mic <-> PC speaker, with relay + PC audio capture
  *
- * Changes from v0.7:
- *   - Opus encoding/decoding (opusscript) for both directions
- *   - Bandwidth: 96 KB/s PCM → ~8 KB/s Opus @ 64kbps
- *   - Latency: 20ms frames, buffering-aware playback
- *   - Auto-negotiation: falls back to PCM if Opus unavailable
+ * v1.1 changes:
+ *   - Relay reconnect with session preservation (60s grace on server)
+ *   - Exponential backoff: 2s → 4s → 8s → 15s cap
+ *   - Audio devices (WASAPI/WinMM) stay alive across reconnects
+ *   - Codec re-negotiation on reconnect
+ *   - Network online/offline event handling
  *
  * Modes:
  *   LAN  (default): PC runs HTTPS server, phone connects directly
@@ -292,10 +293,13 @@ function handleIncomingAudio(data) {
 // ========== WebSocket (LAN mode) ==========
 let localPhoneWs = null;
 let phoneOpus = false; // whether the phone supports Opus
+let lanAudioGraceTimer = null;
+const LAN_AUDIO_GRACE = 60000; // keep audio devices 60s after LAN disconnect
 
 wss.on('connection', (ws, req) => {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   console.log('\n[PHONE] Connected: ' + ip + ' (total: ' + wss.clients.size + ')');
+  clearTimeout(lanAudioGraceTimer);
   bytesReceived = 0;
   localPhoneWs = ws;
   phoneOpus = false;
@@ -320,7 +324,7 @@ wss.on('connection', (ws, req) => {
         }
         else if (msg.type === 'start-pc-audio') {
           console.log('[PHONE] Requested PC audio capture');
-          startPcAudioCapture();
+          if (!captureActive) startPcAudioCapture();
         }
         else if (msg.type === 'stop-pc-audio') {
           console.log('[PHONE] Stopped PC audio capture');
@@ -334,7 +338,12 @@ wss.on('connection', (ws, req) => {
     console.log('[PHONE] Disconnected (remaining: ' + wss.clients.size + ')');
     if (localPhoneWs === ws) localPhoneWs = null;
     phoneOpus = false;
-    stopPcAudioCapture();
+    // Grace period — don't stop audio immediately (phone might be reconnecting)
+    clearTimeout(lanAudioGraceTimer);
+    lanAudioGraceTimer = setTimeout(() => {
+      console.log('[PHONE] Grace period expired, stopping audio devices');
+      stopPcAudioCapture();
+    }, LAN_AUDIO_GRACE);
   });
 
   ws.send(JSON.stringify({ type: 'connected', opus: useOpus }));
@@ -381,17 +390,43 @@ function getAllIPs() {
 // ========== Relay Mode ==========
 let relayWs = null;
 let relaySessionId = null;
+let relayReconnectAttempt = 0;
+let relayReconnectTimer = null;
+let relayAudioGraceTimer = null;
+const RELAY_RECONNECT_MAX_DELAY = 15000;
+const RELAY_AUDIO_GRACE = 60000; // keep audio devices 60s after disconnect
+
+function getRelayReconnectDelay() {
+  const base = Math.min(2000 * Math.pow(2, relayReconnectAttempt), RELAY_RECONNECT_MAX_DELAY);
+  const jitter = base * 0.2 * (Math.random() * 2 - 1);
+  return Math.round(base + jitter);
+}
+
+function scheduleRelayReconnect() {
+  const delay = getRelayReconnectDelay();
+  relayReconnectAttempt++;
+  console.log(`[RELAY] Reconnect attempt ${relayReconnectAttempt} in ${(delay/1000).toFixed(1)}s...`);
+  clearTimeout(relayReconnectTimer);
+  relayReconnectTimer = setTimeout(connectRelay, delay);
+}
 
 function startRelayMode() {
-  console.log('\n=== SoundBridge v0.8 Opus (RELAY) ===\n');
+  console.log('\n=== SoundBridge v1.1 (RELAY) ===\n');
   console.log('[RELAY] Connecting to ' + RELAY_URL + ' ...');
 
   function connectRelay() {
+    // Build URL — include existing sessionId for reconnect
+    let url = RELAY_URL + '?role=pc';
+    // Note: relay-server always gives PC a new session on connect
+    // but phone reconnects using the existing sessionId
+
+    clearTimeout(relayReconnectTimer);
+
     try {
-      relayWs = new WebSocket(RELAY_URL + '?role=pc');
+      relayWs = new WebSocket(url);
     } catch (e) {
       console.log('[RELAY] Connect error: ' + e.message);
-      setTimeout(connectRelay, 5000);
+      scheduleRelayReconnect();
       return;
     }
 
@@ -404,33 +439,60 @@ function startRelayMode() {
         try {
           const msg = JSON.parse(data.toString());
           if (msg.type === 'registered') {
+            // New session registered (or re-registered)
+            const isNewSession = relaySessionId !== msg.sessionId;
             relaySessionId = msg.sessionId;
-            console.log('\n[RELAY] Session ID: ' + relaySessionId);
-            console.log('[RELAY] Phone URL: ' + RELAY_PUBLIC_URL + '#' + relaySessionId);
-            console.log('');
-            qrcode.generate(RELAY_PUBLIC_URL + '#' + relaySessionId, { small: true });
-            console.log('\n' + '='.repeat(35));
-            initAudioOutput();
-            startPcAudioCapture();
-            console.log('\nWaiting for phone (scan QR above)...\n');
+            relayReconnectAttempt = 0; // reset backoff
+            clearTimeout(relayAudioGraceTimer);
+
+            if (isNewSession) {
+              console.log('\n[RELAY] Session ID: ' + relaySessionId);
+              console.log('[RELAY] Phone URL: ' + RELAY_PUBLIC_URL + '#' + relaySessionId);
+              console.log('');
+              qrcode.generate(RELAY_PUBLIC_URL + '#' + relaySessionId, { small: true });
+              console.log('\n' + '='.repeat(35));
+              initAudioOutput();
+              console.log('\nWaiting for phone (scan QR above)...\n');
+            } else {
+              console.log('[RELAY] Re-registered same session: ' + relaySessionId);
+            }
+
           } else if (msg.type === 'phone-connected') {
             console.log('\n[PHONE] Phone connected via relay!');
+            clearTimeout(relayAudioGraceTimer);
             bytesReceived = 0;
-            // Send codec config to phone via relay
+            // Re-negotiate codec on every (re)connect
             if (useOpus) {
               relayWs.send(JSON.stringify({ type: 'audio-config', codec: 'opus', sampleRate: SAMPLE_RATE }));
+              console.log('[OPUS] Re-negotiating Opus with phone...');
             }
-            startPcAudioCapture();
+            // Don't restart capture if already running
+            if (!captureActive) startPcAudioCapture();
+
           } else if (msg.type === 'phone-disconnected') {
-            console.log('[PHONE] Phone disconnected from relay');
-            closeAudio();
-            stopPcAudioCapture();
+            if (msg.reconnectable) {
+              console.log('[PHONE] Phone disconnected (reconnectable) — keeping audio devices alive');
+              // Set grace timer — only stop audio after 60s of no reconnect
+              clearTimeout(relayAudioGraceTimer);
+              relayAudioGraceTimer = setTimeout(() => {
+                console.log('[PHONE] Grace period expired, stopping audio devices');
+                stopPcAudioCapture();
+              }, RELAY_AUDIO_GRACE);
+            } else {
+              console.log('[PHONE] Phone disconnected');
+              stopPcAudioCapture();
+            }
+            phoneOpus = false;
+
           } else if (msg.type === 'audio-config') {
-            // Phone's codec response via relay
             if (msg.codec === 'opus') {
               phoneOpus = true;
               console.log('[OPUS] Negotiated via relay: Opus mode');
+            } else {
+              phoneOpus = false;
+              console.log('[AUDIO] Negotiated via relay: PCM mode');
             }
+
           } else if (msg.type === 'start-pc-audio') {
             startPcAudioCapture();
           } else if (msg.type === 'stop-pc-audio') {
@@ -445,12 +507,13 @@ function startRelayMode() {
     });
 
     relayWs.on('close', () => {
-      console.log('[RELAY] Disconnected, reconnecting in 5s...');
+      console.log('[RELAY] Disconnected');
       relayWs = null;
-      relaySessionId = null;
+      // Don't clear relaySessionId — we'll reuse it on reconnect
+      // Don't stop audio immediately — phone might still be connected via old session
+      // The relay-server keeps the session alive for 60s
       phoneOpus = false;
-      stopPcAudioCapture();
-      setTimeout(connectRelay, 5000);
+      scheduleRelayReconnect();
     });
 
     relayWs.on('error', (err) => {
@@ -467,7 +530,7 @@ if (RELAY_URL) {
 } else {
   httpsServer.listen(PORT, '0.0.0.0', () => {
     const { lanIps, otherIps } = getAllIPs();
-    console.log('\n=== SoundBridge v0.8 Opus (LAN) ===\n');
+    console.log('\n=== SoundBridge v1.1 (LAN) ===\n');
     if (useOpus) console.log('[OPUS] ✓ Opus encoding active (64kbps)');
     else console.log('[AUDIO] PCM mode (Opus unavailable)');
 
@@ -487,6 +550,9 @@ if (RELAY_URL) {
 
 process.on('SIGINT', () => {
   console.log('\n[STOP]');
+  clearTimeout(relayReconnectTimer);
+  clearTimeout(relayAudioGraceTimer);
+  clearTimeout(lanAudioGraceTimer);
   closeAudio();
   stopPcAudioCapture();
   if (httpsServer) httpsServer.close();
