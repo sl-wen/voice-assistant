@@ -461,10 +461,10 @@
       async function initOpusEncoder() {
         if (!('AudioEncoder' in window)) return false;
         try {
-          var support = await AudioEncoder.isConfigSupported({
+          var support = await withTimeout(AudioEncoder.isConfigSupported({
             codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 64000,
-          });
-          if (!support.supported) return false;
+          }), 3000);
+          if (!support || !support.supported) return false;
 
           opusEncoder = new AudioEncoder({
             output: function(chunk) {
@@ -479,9 +479,9 @@
             error: function(e) { console.error('[OPUS] Encoder error:', e); }
           });
 
-          await opusEncoder.configure({
+          await withTimeout(opusEncoder.configure({
             codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 64000,
-          });
+          }), 3000);
           console.log('[OPUS] AudioEncoder ready');
           return true;
         } catch (e) {
@@ -493,6 +493,13 @@
       async function initOpusDecoder() {
         if (!('AudioDecoder' in window)) return false;
         try {
+          var support = await withTimeout(
+            AudioDecoder.isConfigSupported({
+              codec: 'opus', sampleRate: 48000, numberOfChannels: 1,
+            }), 3000
+          );
+          if (!support || !support.supported) return false;
+
           opusDecoder = new AudioDecoder({
             output: function(audioData) {
               var buffer = new Float32Array(audioData.numberOfFrames);
@@ -503,9 +510,9 @@
             error: function(e) { console.error('[OPUS] Decoder error:', e); }
           });
 
-          await opusDecoder.configure({
+          await withTimeout(opusDecoder.configure({
             codec: 'opus', sampleRate: 48000, numberOfChannels: 1,
-          });
+          }), 3000);
           console.log('[OPUS] AudioDecoder ready');
           return true;
         } catch (e) {
