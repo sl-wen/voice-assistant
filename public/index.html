@@ -70,14 +70,23 @@
       background:#475569;flex-shrink:0;transition:all 0.4s;
     }
     .dot.ok{background:#4ade80;box-shadow:0 0 12px rgba(74,222,128,0.5);}
-    .dot.rec{background:#f87171;box-shadow:0 0 12px rgba(248,113,113,0.5);animation:pulse 1s infinite;}
+    .dot.rec{background:#f87171;box-shadow:0 0 12px rgba(248,113,71,0.5);animation:pulse 1s infinite;}
     .dot.blue{background:#60a5fa;box-shadow:0 0 12px rgba(96,165,250,0.5);animation:pulse 1.5s infinite;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
     .conn-info{display:flex;flex-direction:column;gap:2px;flex:1;}
     .stxt{font-size:14px;font-weight:600;color:#e2e8f0;}
     .conn-sub{font-size:11px;color:#64748b;}
 
-    /* ===== Card Base (shared for mic & speaker) ===== */
+    /* ===== Codec Badge ===== */
+    .codec-badge{
+      font-size:10px;padding:2px 8px;border-radius:10px;
+      background:rgba(6,182,212,0.15);color:#67e8f9;
+      font-weight:600;letter-spacing:0.3px;margin-left:auto;
+      white-space:nowrap;
+    }
+    .codec-badge.pcm{background:rgba(100,116,139,0.2);color:#94a3b8;}
+
+    /* ===== Card Base ===== */
     .card{
       width:100%;max-width:400px;
       border-radius:20px;
@@ -93,7 +102,7 @@
       pointer-events:none;
     }
 
-    /* ===== Mic Card (紫红色系) ===== */
+    /* ===== Mic Card ===== */
     .mic-card{
       background:linear-gradient(145deg,rgba(79,70,229,0.10),rgba(124,58,237,0.06));
       border:1px solid rgba(124,58,237,0.15);
@@ -107,7 +116,7 @@
       opacity:1;
     }
 
-    /* ===== Speaker Card (青蓝色系) ===== */
+    /* ===== Speaker Card ===== */
     .spk-card{
       background:linear-gradient(145deg,rgba(6,182,212,0.10),rgba(8,145,178,0.06));
       border:1px solid rgba(6,182,212,0.15);
@@ -133,7 +142,7 @@
     .spk-card.active .card-title{color:#7dd3fc;}
     .card-title .card-icon{font-size:20px;}
 
-    /* Waveform (shared) */
+    /* Waveform */
     .wave{
       display:flex;align-items:center;justify-content:center;
       gap:3px;height:44px;margin-bottom:20px;
@@ -142,14 +151,12 @@
       width:4px;height:8px;border-radius:2px;
       transition:background 0.3s;
     }
-    /* Mic wave: purple → red when active */
     .mic-card .wave .bar{background:rgba(124,58,237,0.3);}
     .mic-card.active .wave .bar{animation:wMic 0.6s ease-in-out infinite;}
     @keyframes wMic{
       0%,100%{height:8px;background:#ef4444;}
       50%{height:36px;background:#f87171;}
     }
-    /* Speaker wave: cyan */
     .spk-card .wave .bar{background:rgba(6,182,212,0.3);}
     .spk-card.active .wave .bar{animation:wSpk 0.6s ease-in-out infinite;}
     @keyframes wSpk{
@@ -157,7 +164,7 @@
       50%{height:36px;background:#67e8f9;}
     }
 
-    /* ===== Big Round Button (shared) ===== */
+    /* ===== Big Round Button ===== */
     .big-btn{
       width:110px;height:110px;border-radius:50%;border:none;
       color:#fff;font-size:44px;cursor:pointer;
@@ -237,7 +244,7 @@
     .mic-card.active .info-row .val{color:#f87171;}
     .spk-card .info-row .val{color:#22d3ee;}
 
-    /* Volume slider inside speaker card */
+    /* Volume slider */
     .vol-row{
       display:flex;align-items:center;gap:10px;
     }
@@ -275,7 +282,7 @@
     }
     .footer .ver{color:#475569;}
 
-    /* ===== Safe Area (notch devices) ===== */
+    /* ===== Safe Area ===== */
     @supports(padding:env(safe-area-inset-top)){
       body{padding-top:env(safe-area-inset-top);}
       .brand{padding-top:max(40px,env(safe-area-inset-top));}
@@ -300,8 +307,9 @@
     <div class="dot" id="dot"></div>
     <div class="conn-info">
       <span class="stxt" id="stxt">连接中...</span>
-      <span class="conn-sub">📊 等待服务器响应</span>
+      <span class="conn-sub" id="connSub">📊 等待服务器响应</span>
     </div>
+    <span class="codec-badge" id="codecBadge" style="display:none"></span>
   </div>
 
   <!-- ===== Mic Card ===== -->
@@ -309,7 +317,6 @@
     <div class="card-title">
       <span class="card-icon">🎙️</span> 麦克风 → 收音到 PC
     </div>
-    <!-- Mic waveform -->
     <div class="wave" id="micWave">
       <div class="bar" style="animation-delay:0s"></div>
       <div class="bar" style="animation-delay:.08s"></div>
@@ -321,10 +328,8 @@
       <div class="bar" style="animation-delay:.24s"></div>
       <div class="bar" style="animation-delay:.16s"></div>
     </div>
-    <!-- Mic big button -->
     <button class="big-btn mic-btn" id="micBtn" disabled>🎙️</button>
     <div class="btn-label" id="micLbl">点击开始收音</div>
-    <!-- Mic sub-info -->
     <div class="card-info">
       <div class="info-row">
         <span class="label">📤 已发送</span>
@@ -338,7 +343,6 @@
     <div class="card-title">
       <span class="card-icon">🔊</span> 音箱 ← 播放 PC 声音
     </div>
-    <!-- Speaker waveform -->
     <div class="wave" id="spkWave">
       <div class="bar" style="animation-delay:0s"></div>
       <div class="bar" style="animation-delay:.08s"></div>
@@ -350,10 +354,8 @@
       <div class="bar" style="animation-delay:.24s"></div>
       <div class="bar" style="animation-delay:.16s"></div>
     </div>
-    <!-- Speaker big button (hidden toggle reused underneath) -->
     <button class="big-btn spk-btn" id="spkBtn">🔊</button>
     <div class="btn-label" id="spkLbl">点击开始播放</div>
-    <!-- Speaker sub-info -->
     <div class="card-info">
       <div class="vol-row">
         <span class="vol-icon">🔈</span>
@@ -365,7 +367,6 @@
         <span class="val" id="statSpk">0 B</span>
       </div>
     </div>
-    <!-- Hidden toggle for JS compatibility -->
     <div class="toggle" id="spkToggle" style="display:none"></div>
   </div>
 
@@ -374,20 +375,20 @@
 
   <!-- Footer -->
   <div class="footer">
-    <span class="ver">SoundBridge v1.0</span> · slwen.cn
+    <span class="ver">SoundBridge v1.1 Opus</span> · slwen.cn
   </div>
 
   <div style="display:none" id="log"></div>
 
   <script>
     var dot=document.getElementById('dot'), stxt=document.getElementById('stxt');
+    var connSub=document.getElementById('connSub');
+    var codecBadge=document.getElementById('codecBadge');
     var micBtn=document.getElementById('micBtn'), micLbl=document.getElementById('micLbl');
     var micWave=document.getElementById('micWave');
     var spkToggle=document.getElementById('spkToggle'), spkVol=document.getElementById('spkVol');
     var errEl=document.getElementById('err'), dbgEl=document.getElementById('dbg');
     var statMic=document.getElementById('statMic'), statSpk=document.getElementById('statSpk');
-
-    // New UI elements
     var micCard=document.getElementById('micCard');
     var spkCard=document.getElementById('spkCard');
     var spkBtn=document.getElementById('spkBtn');
@@ -398,9 +399,139 @@
     var actx=null, playCtx=null, gainNode=null, nextTime=0, stream=null;
     var micBytes=0, spkBytes=0, pingTimer=null, logEl=document.getElementById('log');
 
+    // ===== Opus state =====
+    var useOpus = false;
+    var opusEncoder = null;  // WebCodecs AudioEncoder
+    var opusDecoder = null;  // WebCodecs AudioDecoder
+    var encodeTs = 0;
+    var pcmAccum = new Float32Array(0);
+    var OPUS_FRAME_SIZE = 960; // 20ms @ 48kHz
+
     function dbg(m){dbgEl.textContent=m;}
     function log(m){logEl.textContent=new Date().toLocaleTimeString()+' '+m;}
     function fmt(b){return b>1048576?(b/1048576).toFixed(1)+' MB':b>1024?(b/1024).toFixed(1)+' KB':b+' B';}
+
+    // ===== Opus init =====
+    async function initOpusEncoder() {
+      if (!('AudioEncoder' in window)) {
+        console.log('[OPUS] AudioEncoder not available');
+        return false;
+      }
+      try {
+        // Check if opus codec is supported
+        var support = await AudioEncoder.isConfigSupported({
+          codec: 'opus',
+          sampleRate: 48000,
+          numberOfChannels: 1,
+          bitrate: 64000,
+        });
+        if (!support.supported) {
+          console.log('[OPUS] Opus codec not supported');
+          return false;
+        }
+
+        opusEncoder = new AudioEncoder({
+          output: function(chunk) {
+            if (ws && ws.readyState === 1) {
+              var buf = new ArrayBuffer(chunk.byteLength);
+              chunk.copyTo(buf);
+              ws.send(buf);
+              micBytes += buf.byteLength;
+              statMic.textContent = fmt(micBytes);
+            }
+          },
+          error: function(e) { console.error('[OPUS] Encoder error:', e); }
+        });
+
+        await opusEncoder.configure({
+          codec: 'opus',
+          sampleRate: 48000,
+          numberOfChannels: 1,
+          bitrate: 64000,
+        });
+
+        console.log('[OPUS] AudioEncoder ready');
+        return true;
+      } catch (e) {
+        console.log('[OPUS] Encoder init failed:', e.message);
+        return false;
+      }
+    }
+
+    async function initOpusDecoder() {
+      if (!('AudioDecoder' in window)) {
+        console.log('[OPUS] AudioDecoder not available');
+        return false;
+      }
+      try {
+        opusDecoder = new AudioDecoder({
+          output: function(audioData) {
+            var buffer = new Float32Array(audioData.numberOfFrames);
+            audioData.copyTo(buffer, { planeIndex: 0, format: 'f32' });
+            audioData.close();
+            playDecodedPCM(buffer);
+          },
+          error: function(e) { console.error('[OPUS] Decoder error:', e); }
+        });
+
+        await opusDecoder.configure({
+          codec: 'opus',
+          sampleRate: 48000,
+          numberOfChannels: 1,
+        });
+
+        console.log('[OPUS] AudioDecoder ready');
+        return true;
+      } catch (e) {
+        console.log('[OPUS] Decoder init failed:', e.message);
+        return false;
+      }
+    }
+
+    // Accumulate PCM and encode frame-by-frame
+    function feedEncoder(f32samples) {
+      if (!opusEncoder || opusEncoder.state === 'closed') return;
+
+      var merged = new Float32Array(pcmAccum.length + f32samples.length);
+      merged.set(pcmAccum);
+      merged.set(f32samples, pcmAccum.length);
+
+      var offset = 0;
+      while (offset + OPUS_FRAME_SIZE <= merged.length) {
+        var frame = merged.slice(offset, offset + OPUS_FRAME_SIZE);
+        try {
+          var audioData = new AudioData({
+            format: 'f32-planar',
+            sampleRate: 48000,
+            numberOfFrames: OPUS_FRAME_SIZE,
+            numberOfChannels: 1,
+            timestamp: encodeTs,
+            data: frame.buffer,
+          });
+          opusEncoder.encode(audioData);
+          audioData.close();
+        } catch (e) {
+          console.error('[OPUS] encode frame error:', e);
+        }
+        encodeTs += OPUS_FRAME_SIZE * 1e6 / 48000;
+        offset += OPUS_FRAME_SIZE;
+      }
+      pcmAccum = merged.slice(offset);
+    }
+
+    // Play decoded PCM (Float32)
+    function playDecodedPCM(f32) {
+      if (!playCtx) return;
+      var ab = playCtx.createBuffer(1, f32.length, 48000);
+      ab.copyToChannel(f32, 0);
+      var src = playCtx.createBufferSource();
+      src.buffer = ab;
+      src.connect(gainNode || playCtx.destination);
+      var now = playCtx.currentTime;
+      if (nextTime < now) nextTime = now;
+      src.start(nextTime);
+      nextTime += ab.duration;
+    }
 
     // ===== Detect relay mode =====
     var relayMode=false, sessionId=null;
@@ -415,6 +546,7 @@
     // ===== Connect =====
     function connect(){
       dot.className='dot'; stxt.textContent='连接中...';
+      connSub.textContent='📊 等待服务器响应';
 
       var url;
       if(relayMode){
@@ -442,8 +574,11 @@
       ws.onclose=function(){
         clearInterval(pingTimer);
         dot.className='dot'; stxt.textContent='重新连接中...';
+        connSub.textContent='📊 连接断开，正在重连...';
         micBtn.disabled=true; spkBtn.disabled=true;
         stopMic(); stopSpeaker();
+        useOpus = false;
+        showCodecBadge();
         setTimeout(connect,2000);
       };
       ws.onerror=function(){
@@ -457,12 +592,26 @@
             var m=JSON.parse(ev.data);
             if(m.type==='connected'){
               dbg('Server OK');
-              dot.className='dot ok'; stxt.textContent='已连接'+(relayMode?' (中继)':'');
+              dot.className='dot ok';
+              stxt.textContent='已连接'+(relayMode?' (中继)':'');
               micBtn.disabled=false; spkBtn.disabled=false;
               clearInterval(pingTimer);
               pingTimer=setInterval(function(){
                 if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
               },5000);
+              // Negotiate codec
+              negotiateCodec(m.opus);
+            }else if(m.type==='audio-config'){
+              // Server's codec response
+              if(m.codec==='opus'){
+                useOpus=true;
+                connSub.textContent='🎵 Opus 64kbps — 低延迟模式';
+              }else{
+                useOpus=false;
+                connSub.textContent='🎵 PCM 48kHz — 原始模式';
+              }
+              showCodecBadge();
+              log('Codec negotiated: '+m.codec);
             }else if(m.type==='error'){
               stxt.textContent='错误: '+m.message;
               errEl.textContent=m.message;errEl.style.display='block';
@@ -473,12 +622,67 @@
             }
           }catch(e){}
         }else{
+          // Binary audio data from PC
           spkBytes+=ev.data.byteLength;
           statSpk.textContent=fmt(spkBytes);
           if(spkBytes<3000) log('PC audio: '+ev.data.byteLength+' bytes');
-          if(spkOn) playChunk(ev.data);
+          if(spkOn) {
+            if (useOpus && opusDecoder && opusDecoder.state !== 'closed') {
+              // Decode Opus -> PCM
+              try {
+                var chunk = new EncodedAudioChunk({
+                  type: 'key',
+                  timestamp: 0,
+                  data: ev.data,
+                });
+                opusDecoder.decode(chunk);
+              } catch(e) {
+                console.error('[OPUS] decode error:', e);
+              }
+            } else {
+              playChunk(ev.data);
+            }
+          }
         }
       };
+    }
+
+    // ===== Codec Negotiation =====
+    async function negotiateCodec(serverSupportsOpus) {
+      if (!serverSupportsOpus) {
+        // Old server, PCM only
+        useOpus = false;
+        connSub.textContent = '🎵 PCM 48kHz';
+        showCodecBadge();
+        return;
+      }
+
+      // Try to init encoder + decoder
+      var encOk = await initOpusEncoder();
+      var decOk = await initOpusDecoder();
+
+      if (encOk && decOk) {
+        // Tell server we want Opus
+        ws.send(JSON.stringify({ type: 'audio-config', codec: 'opus', sampleRate: 48000 }));
+        dbg('Opus mode requested...');
+      } else {
+        // Fallback to PCM
+        ws.send(JSON.stringify({ type: 'audio-config', codec: 'pcm', sampleRate: 48000 }));
+        useOpus = false;
+        connSub.textContent = '🎵 PCM 48kHz — 浏览器不支持 Opus';
+        showCodecBadge();
+      }
+    }
+
+    function showCodecBadge() {
+      if (useOpus) {
+        codecBadge.textContent = 'OPUS';
+        codecBadge.className = 'codec-badge';
+      } else {
+        codecBadge.textContent = 'PCM';
+        codecBadge.className = 'codec-badge pcm';
+      }
+      codecBadge.style.display = '';
     }
 
     // ===== Mic (Phone -> PC) =====
@@ -495,16 +699,27 @@
         var src=actx.createMediaStreamSource(s);
         var proc=actx.createScriptProcessor(4096,1,1);
         src.connect(proc); proc.connect(actx.destination);
+
+        encodeTs = 0;
+        pcmAccum = new Float32Array(0);
+
         proc.onaudioprocess=function(e){
           if(!recording||!ws||ws.readyState!==1)return;
           var f32=e.inputBuffer.getChannelData(0);
-          var i16=new Int16Array(f32.length);
-          for(var i=0;i<f32.length;i++){
-            i16[i]=Math.max(-32768,Math.min(32767,f32[i]<0?f32[i]*0x8000:f32[i]*0x7FFF));
+
+          if(useOpus && opusEncoder && opusEncoder.state==='configured'){
+            // Opus mode: accumulate and encode
+            feedEncoder(f32);
+          }else{
+            // PCM mode: convert f32 -> s16 and send
+            var i16=new Int16Array(f32.length);
+            for(var i=0;i<f32.length;i++){
+              i16[i]=Math.max(-32768,Math.min(32767,f32[i]<0?f32[i]*0x8000:f32[i]*0x7FFF));
+            }
+            ws.send(i16.buffer);
+            micBytes+=i16.buffer.byteLength;
+            statMic.textContent=fmt(micBytes);
           }
-          ws.send(i16.buffer);
-          micBytes+=i16.buffer.byteLength;
-          statMic.textContent=fmt(micBytes);
         };
         recording=true;
         micBtn.className='big-btn mic-btn rec';micBtn.innerHTML='⏹';
@@ -521,6 +736,10 @@
       recording=false;
       if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
       if(actx&&actx.state!=='closed'){actx.close();actx=null;}
+      if(opusEncoder && opusEncoder.state==='configured'){
+        try{opusEncoder.flush();}catch(e){}
+      }
+      pcmAccum = new Float32Array(0);
       micBtn.className='big-btn mic-btn';micBtn.innerHTML='🎙️';
       micLbl.textContent='点击开始收音';
       micCard.classList.remove('active');
@@ -531,7 +750,6 @@
     // ===== Speaker (PC -> Phone) =====
     function startSpeaker(){
       spkOn=true;
-      // Sync the hidden toggle for compatibility
       spkToggle.className='toggle on blue';
       spkBtn.className='big-btn spk-btn on';
       spkBtn.innerHTML='🔇';
@@ -572,14 +790,7 @@
       if(_chunkCount<=3) log('chunk#'+_chunkCount+' '+i16.length+' samples, '+buf.byteLength+' bytes');
       var f32=new Float32Array(i16.length);
       for(var i=0;i<i16.length;i++) f32[i]=i16[i]/32768;
-      var ab=playCtx.createBuffer(1,f32.length,48000);
-      ab.copyToChannel(f32,0);
-      var src=playCtx.createBufferSource();
-      src.buffer=ab; src.connect(gainNode);
-      var now=playCtx.currentTime;
-      if(nextTime<now)nextTime=now;
-      src.start(nextTime);
-      nextTime+=ab.duration;
+      playDecodedPCM(f32);
     }
 
     // ===== Events =====
@@ -593,7 +804,6 @@
       if(spkBtn.disabled)return;
       spkOn?stopSpeaker():startSpeaker();
     };
-    // Keep spkToggle click for compatibility (though hidden)
     spkToggle.onclick=function(){spkOn?stopSpeaker():startSpeaker();};
     spkVol.oninput=function(){if(gainNode)gainNode.gain.value=spkVol.value/100;};
 

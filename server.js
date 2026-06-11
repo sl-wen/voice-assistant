@@ -1,11 +1,17 @@
 /**
- * Voice Assistant Server v0.7
+ * SoundBridge Server v0.8 — Opus Edition
  * Phone mic <-> PC speaker, with relay + PC audio capture
- * 
+ *
+ * Changes from v0.7:
+ *   - Opus encoding/decoding (opusscript) for both directions
+ *   - Bandwidth: 96 KB/s PCM → ~8 KB/s Opus @ 64kbps
+ *   - Latency: 20ms frames, buffering-aware playback
+ *   - Auto-negotiation: falls back to PCM if Opus unavailable
+ *
  * Modes:
  *   LAN  (default): PC runs HTTPS server, phone connects directly
  *   RELAY: PC connects to cloud relay, phone connects via internet
- * 
+ *
  * Usage:
  *   npm start                          # LAN mode
  *   RELAY_URL=wss://slwen.cn/voice/ws npm start  # Relay mode
@@ -25,6 +31,34 @@ const PORT = process.env.PORT || 3000;
 const SAMPLE_RATE = 48000;
 const RELAY_URL = process.env.RELAY_URL || null;
 const RELAY_PUBLIC_URL = process.env.RELAY_PUBLIC_URL || 'https://slwen.cn/voice/';
+
+// ========== Opus ==========
+let opusEncoder = null;
+let opusDecoder = null;
+let useOpus = false;
+const OPUS_FRAME_SIZE = 960; // 20ms @ 48kHz
+const OPUS_FRAME_BYTES = OPUS_FRAME_SIZE * 2; // s16le = 2 bytes/sample
+
+try {
+  const OpusScript = require('opusscript');
+  opusEncoder = new OpusScript(SAMPLE_RATE, 1, OpusScript.Application.VOIP);
+  opusEncoder.setBitrate(64000);
+  opusDecoder = new OpusScript(SAMPLE_RATE, 1, OpusScript.Application.VOIP);
+  useOpus = true;
+  console.log('[OPUS] Encoder & Decoder ready (64kbps)');
+} catch (e) {
+  console.log('[OPUS] opusscript unavailable, PCM fallback: ' + e.message);
+}
+
+function opusEncode(pcmBuffer) {
+  if (!opusEncoder) return null;
+  return opusEncoder.encode(pcmBuffer, OPUS_FRAME_SIZE);
+}
+
+function opusDecode(opusFrame) {
+  if (!opusDecoder) return null;
+  return opusDecoder.decode(opusFrame);
+}
 
 // ========== Express ==========
 const app = express();
@@ -111,10 +145,10 @@ function initFileOutput() {
   console.log('[OUT] Saving to: ' + wavPath);
 }
 
-function writeAudio(data) {
-  bytesReceived += data.length;
-  if (audioMode === 'ps' && audioProcess && audioProcess.stdin.writable) audioProcess.stdin.write(data);
-  else if (audioMode === 'file' && wavFd) fs.writeSync(wavFd, data);
+function writeAudioPCM(pcmData) {
+  bytesReceived += pcmData.length;
+  if (audioMode === 'ps' && audioProcess && audioProcess.stdin.writable) audioProcess.stdin.write(pcmData);
+  else if (audioMode === 'file' && wavFd) fs.writeSync(wavFd, pcmData);
 }
 
 function closeAudio() {
@@ -135,23 +169,20 @@ function closeAudio() {
 let captureProcess = null;
 let captureActive = false;
 let bytesSent = 0;
+let capturePCMBuffer = Buffer.alloc(0);
 
 function getPhoneWs() {
   if (relayWs && relayWs.readyState === WebSocket.OPEN) return relayWs;
   if (localPhoneWs && localPhoneWs.readyState === WebSocket.OPEN) return localPhoneWs;
-  // LAN mode: broadcast to all connected clients
-  // (in LAN mode there's usually just one phone)
   return null;
 }
 
 function sendToPhone(data) {
-  // Relay mode
   if (relayWs && relayWs.readyState === WebSocket.OPEN) {
     relayWs.send(data, { binary: true });
     bytesSent += data.length;
     return;
   }
-  // LAN mode: send to all connected phones
   const sent = [];
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -161,6 +192,21 @@ function sendToPhone(data) {
     }
   });
   if (sent.length === 0) console.log('[SEND] No phone connected to receive');
+}
+
+function sendPCMToPhone(pcmChunk) {
+  if (useOpus && opusEncoder) {
+    // Accumulate PCM and encode frame-by-frame
+    capturePCMBuffer = Buffer.concat([capturePCMBuffer, pcmChunk]);
+    while (capturePCMBuffer.length >= OPUS_FRAME_BYTES) {
+      const frame = capturePCMBuffer.slice(0, OPUS_FRAME_BYTES);
+      capturePCMBuffer = capturePCMBuffer.slice(OPUS_FRAME_BYTES);
+      const encoded = opusEncode(frame);
+      sendToPhone(encoded);
+    }
+  } else {
+    sendToPhone(pcmChunk);
+  }
 }
 
 function startPcAudioCapture() {
@@ -175,7 +221,6 @@ function startPcAudioCapture() {
 
   if (!fs.existsSync(exePath)) {
     console.log('[CAPTURE] First run: compiling WASAPI loopback capture...');
-    // Compile C# -> exe
     const csc = spawn('cmd.exe', ['/c',
       'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
       '/unsafe', '/optimize', '/platform:x64', '/out:' + exePath, csPath
@@ -200,11 +245,12 @@ function launchCapture(exePath) {
   console.log('[CAPTURE] Launching: ' + exePath + ' ' + SAMPLE_RATE);
   captureProcess = spawn(exePath, [SAMPLE_RATE.toString()], { stdio: ['pipe','pipe','pipe'] });
   captureActive = true;
+  capturePCMBuffer = Buffer.alloc(0);
 
   captureProcess.stdout.on('data', (chunk) => {
     if (!captureActive) return;
     if (process.env.DEBUG) console.log('[CAPTURE] stdout: ' + chunk.length + ' bytes');
-    sendToPhone(chunk);
+    sendPCMToPhone(chunk);
   });
 
   captureProcess.stderr.on('data', (d) => {
@@ -224,31 +270,54 @@ function launchCapture(exePath) {
     captureProcess = null;
   });
 
-  console.log('[CAPTURE] WASAPI loopback capture started');
+  console.log('[CAPTURE] WASAPI loopback capture started' + (useOpus ? ' (Opus)' : ' (PCM)'));
 }
 
 function stopPcAudioCapture() {
   if (captureProcess) { captureProcess.kill(); captureProcess = null; }
   captureActive = false;
+  capturePCMBuffer = Buffer.alloc(0);
+}
+
+// ========== Handle incoming audio (from phone or relay) ==========
+function handleIncomingAudio(data) {
+  if (useOpus && opusDecoder) {
+    const pcm = opusDecode(data);
+    if (pcm) writeAudioPCM(pcm);
+  } else {
+    writeAudioPCM(data);
+  }
 }
 
 // ========== WebSocket (LAN mode) ==========
 let localPhoneWs = null;
+let phoneOpus = false; // whether the phone supports Opus
 
 wss.on('connection', (ws, req) => {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   console.log('\n[PHONE] Connected: ' + ip + ' (total: ' + wss.clients.size + ')');
   bytesReceived = 0;
   localPhoneWs = ws;
+  phoneOpus = false;
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
-      writeAudio(data);
+      handleIncomingAudio(data);
     } else {
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
-        else if (msg.type === 'audio-config') console.log('[AUDIO] rate=' + msg.sampleRate);
+        else if (msg.type === 'audio-config') {
+          console.log('[PHONE] audio-config:', JSON.stringify(msg));
+          if (msg.codec === 'opus' && useOpus) {
+            phoneOpus = true;
+            ws.send(JSON.stringify({ type: 'audio-config', codec: 'opus', sampleRate: SAMPLE_RATE }));
+            console.log('[OPUS] Negotiated: Opus mode');
+          } else {
+            ws.send(JSON.stringify({ type: 'audio-config', codec: 'pcm', sampleRate: SAMPLE_RATE }));
+            console.log('[AUDIO] Negotiated: PCM mode');
+          }
+        }
         else if (msg.type === 'start-pc-audio') {
           console.log('[PHONE] Requested PC audio capture');
           startPcAudioCapture();
@@ -264,10 +333,11 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     console.log('[PHONE] Disconnected (remaining: ' + wss.clients.size + ')');
     if (localPhoneWs === ws) localPhoneWs = null;
+    phoneOpus = false;
     stopPcAudioCapture();
   });
 
-  ws.send(JSON.stringify({ type: 'connected' }));
+  ws.send(JSON.stringify({ type: 'connected', opus: useOpus }));
 });
 
 // ========== HTTPS Server ==========
@@ -313,7 +383,7 @@ let relayWs = null;
 let relaySessionId = null;
 
 function startRelayMode() {
-  console.log('\n=== Voice Assistant v0.7 (RELAY) ===\n');
+  console.log('\n=== SoundBridge v0.8 Opus (RELAY) ===\n');
   console.log('[RELAY] Connecting to ' + RELAY_URL + ' ...');
 
   function connectRelay() {
@@ -346,11 +416,21 @@ function startRelayMode() {
           } else if (msg.type === 'phone-connected') {
             console.log('\n[PHONE] Phone connected via relay!');
             bytesReceived = 0;
+            // Send codec config to phone via relay
+            if (useOpus) {
+              relayWs.send(JSON.stringify({ type: 'audio-config', codec: 'opus', sampleRate: SAMPLE_RATE }));
+            }
             startPcAudioCapture();
           } else if (msg.type === 'phone-disconnected') {
             console.log('[PHONE] Phone disconnected from relay');
             closeAudio();
             stopPcAudioCapture();
+          } else if (msg.type === 'audio-config') {
+            // Phone's codec response via relay
+            if (msg.codec === 'opus') {
+              phoneOpus = true;
+              console.log('[OPUS] Negotiated via relay: Opus mode');
+            }
           } else if (msg.type === 'start-pc-audio') {
             startPcAudioCapture();
           } else if (msg.type === 'stop-pc-audio') {
@@ -360,7 +440,7 @@ function startRelayMode() {
           }
         } catch (e) {}
       } else {
-        writeAudio(data);
+        handleIncomingAudio(data);
       }
     });
 
@@ -368,6 +448,7 @@ function startRelayMode() {
       console.log('[RELAY] Disconnected, reconnecting in 5s...');
       relayWs = null;
       relaySessionId = null;
+      phoneOpus = false;
       stopPcAudioCapture();
       setTimeout(connectRelay, 5000);
     });
@@ -386,7 +467,9 @@ if (RELAY_URL) {
 } else {
   httpsServer.listen(PORT, '0.0.0.0', () => {
     const { lanIps, otherIps } = getAllIPs();
-    console.log('\n=== Voice Assistant v0.7 (LAN) ===\n');
+    console.log('\n=== SoundBridge v0.8 Opus (LAN) ===\n');
+    if (useOpus) console.log('[OPUS] ✓ Opus encoding active (64kbps)');
+    else console.log('[AUDIO] PCM mode (Opus unavailable)');
 
     const showIps = lanIps.length > 0 ? lanIps : otherIps;
     for (const item of showIps) {
