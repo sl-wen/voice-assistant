@@ -113,6 +113,7 @@ wss.on('connection', (ws, req) => {
       id,
       pc: ws,
       phone: null,
+      pcOpus: false,
       createdAt: Date.now(),
       lastDisconnect: null,
       heartbeatTimer: null,
@@ -173,7 +174,8 @@ wss.on('connection', (ws, req) => {
 
     s.phone = ws;
     s.lastDisconnect = null; // Clear disconnect timer
-    ws.send(JSON.stringify({ type: 'connected', sessionId: sidUpper }));
+    const hasOpus = true; // PC always supports opus (opusscript on Node.js)
+    ws.send(JSON.stringify({ type: 'connected', sessionId: sidUpper, opus: hasOpus }));
     console.log(`[PHONE] ${s.pc ? 'Reconnected' : 'Joined'} session ${sidUpper}`);
 
     // Notify PC

@@ -628,6 +628,8 @@
                 stxt.textContent='已连接'+(relayMode?' (中继)':'');
                 if (reconnectCount > 1) {
                   connSub.textContent='🔄 已重连 (第 '+(reconnectCount-1)+' 次)';
+                } else {
+                  connSub.textContent='✅ 服务器已响应';
                 }
                 micBtn.disabled=false; spkBtn.disabled=false;
                 clearInterval(pingTimer);
