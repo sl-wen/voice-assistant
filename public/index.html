@@ -733,6 +733,15 @@
       }
 
       // ===== Codec Negotiation =====
+      function withTimeout(promise, ms) {
+        return Promise.race([
+          promise,
+          new Promise(function(_, reject) {
+            setTimeout(function() { reject(new Error('timeout after ' + ms + 'ms')); }, ms);
+          })
+        ]);
+      }
+
       async function negotiateCodec(serverSupportsOpus, callback) {
         if (!serverSupportsOpus) {
           useOpus = false;
@@ -744,9 +753,9 @@
 
         connSub.textContent = '🔄 检查 Opus 编码器...';
         var encOk = false, decOk = false;
-        try { encOk = await initOpusEncoder(); } catch(e) { console.error('[OPUS] encoder crash:', e); }
+        try { encOk = await withTimeout(initOpusEncoder(), 3000); } catch(e) { console.error('[OPUS] encoder fail:', e); }
         connSub.textContent = '🔄 检查 Opus 解码器...';
-        try { decOk = await initOpusDecoder(); } catch(e) { console.error('[OPUS] decoder crash:', e); }
+        try { decOk = await withTimeout(initOpusDecoder(), 3000); } catch(e) { console.error('[OPUS] decoder fail:', e); }
 
         if (encOk && decOk) {
           ws.send(JSON.stringify({ type: 'audio-config', codec: 'opus', sampleRate: 48000 }));
