@@ -2,7 +2,7 @@
  * SoundBridge All-in-One Launcher
  * 
  * 打包步骤：
- * 1. 编译此文件: csc /platform:x64 /out:SoundBridge.exe SoundBridge.cs /r:System.Windows.Forms.dll /r:System.Drawing.dll
+ * 1. 编译此文件: csc /platform:x64 /target:winexe /out:SoundBridge.exe SoundBridge.cs /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll
  * 2. 把所有运行文件打成 ZIP: 
  *    server.js, package.json, node_modules/, public/, audio-capture.cs
  * 3. 把 ZIP 追加到 EXE 末尾: 
